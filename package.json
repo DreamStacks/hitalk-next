@@ -1,0 +1,26 @@
+{
+  "name": "hitalk-next",
+  "version": "0.1.0",
+  "description": "一款快速、简洁且高效的无后端评论系统",
+  "keywords": [],
+  "license": "MIT",
+  "author": "ihoey <mail@ihoey.com> (https://blog.ihoey.com/)",
+  "main": "index.js",
+  "scripts": {
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": "pnpm run lint",
+    "*": "oxfmt --no-error-on-unmatched-pattern"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "oxfmt": "^0.26.0",
+    "oxlint": "^1.41.0"
+  }
+}
