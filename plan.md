@@ -66,11 +66,13 @@ website TEXT,
 content_md TEXT, -- Markdown 原文（新增）
 content_html TEXT, -- 渲染后的 HTML
 ua TEXT,
-ip_hash TEXT, -- 可选：防刷
+ip_hash TEXT, -- 防刷
 like_count INTEGER DEFAULT 0,
 is_pinned BOOLEAN DEFAULT false,
 created_at DATETIME,
-updated_at DATETIME
+updated_at DATETIME,
+is_admin BOOLEAN DEFAULT false,
+mail_notified BOOLEAN DEFAULT false
 )
 
 4.2 与 v1 数据结构对照
@@ -243,7 +245,7 @@ Phase 1：后端最小可用 API（Day 1–2）
 
 1.1 项目初始化
 • 新建仓库 hitalk-server
-• 选择运行时（Worker / Node）
+• 选择运行时 Hono（Worker / Node）
 • 基础路由 + JSON 响应
 
 1.2 数据库 Schema
