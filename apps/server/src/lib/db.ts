@@ -5,34 +5,8 @@
 import { nanoid } from 'nanoid'
 import type { Comment, Page } from '@hitalk/shared'
 
-interface D1Database {
-  prepare(query: string): D1PreparedStatement
-  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<T[]>
-  exec(query: string): Promise<D1ExecResult>
-}
-
-interface D1PreparedStatement {
-  bind(...values: unknown[]): D1PreparedStatement
-  first<T = unknown>(colName?: string): Promise<T | null>
-  run(): Promise<D1Response>
-  all<T = unknown>(): Promise<D1Result<T>>
-}
-
-interface D1Response {
-  success: boolean
-  meta: Record<string, unknown>
-}
-
-interface D1Result<T = unknown> {
-  results: T[]
-  success: boolean
-  meta: Record<string, unknown>
-}
-
-interface D1ExecResult {
-  count: number
-  duration: number
-}
+// D1 types are provided by @cloudflare/workers-types
+// No need to redefine them here
 
 /**
  * 格式化 SQLite 时间字符串为 ISO 8601 UTC
@@ -247,7 +221,7 @@ export async function likeComment(
       success: true,
       like_count: comment?.like_count || 0,
     }
-  } catch (_error) {
+  } catch {
     throw new Error('点赞失败')
   }
 }
