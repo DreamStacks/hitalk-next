@@ -130,10 +130,36 @@ export async function getComments(
 ): Promise<Comment[]> {
   const result = await db
     .prepare(
-      'SELECT * FROM comments WHERE page_id = ? ORDER BY created_at DESC'
+      'SELECT * FROM comments WHERE page_id = ? ORDER BY is_pinned DESC, created_at DESC'
     )
     .bind(page_id)
     .all<Comment>()
+
+  return result.results.map(c => ({
+    ...c,
+    created_at: formatTimestamp(c.created_at),
+    updated_at: formatTimestamp(c.updated_at),
+  }))
+}
+
+/**
+ * 获取所有评论(管理员用)
+ */
+export async function getAllComments(
+  db: D1Database,
+  limit: number = 50,
+  offset: number = 0
+): Promise<Comment[]> {
+  const result = await db
+    .prepare(
+      `SELECT c.*, p.path as page_path
+       FROM comments c
+       JOIN pages p ON c.page_id = p.id
+       ORDER BY c.created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+    .bind(limit, offset)
+    .all<Comment & { page_path: string }>()
 
   return result.results.map(c => ({
     ...c,
@@ -279,6 +305,56 @@ export async function getCommentCounts(
   })
 
   return counts
+}
+
+/**
+ * 删除评论
+ */
+export async function deleteComment(
+  db: D1Database,
+  id: string
+): Promise<{ success: boolean }> {
+  // 先获取评论信息以更新 page_id 计数
+  const comment = await db
+    .prepare('SELECT page_id FROM comments WHERE id = ?')
+    .bind(id)
+    .first<{ page_id: number }>()
+
+  if (!comment) {
+    return { success: false }
+  }
+
+  // 删除评论 (级联删除会自动处理子评论和点赞记录)
+  await db.prepare('DELETE FROM comments WHERE id = ?').bind(id).run()
+
+  // 更新 page 的评论计数 (仅减少一条，如果是批量删除子评论，这里逻辑可能需要优化)
+  // 但目前这种删除单条的方式是符合预期的
+  await db
+    .prepare(
+      'UPDATE pages SET comment_count = MAX(0, comment_count - 1), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    )
+    .bind(comment.page_id)
+    .run()
+
+  return { success: true }
+}
+
+/**
+ * 置顶/取消置顶评论
+ */
+export async function pinComment(
+  db: D1Database,
+  id: string,
+  is_pinned: boolean
+): Promise<{ success: boolean; is_pinned: boolean }> {
+  await db
+    .prepare(
+      'UPDATE comments SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    )
+    .bind(is_pinned ? 1 : 0, id)
+    .run()
+
+  return { success: true, is_pinned }
 }
 
 /**

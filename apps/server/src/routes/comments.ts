@@ -17,14 +17,34 @@ import {
   buildCommentTree,
   likeComment,
   getCommentCounts,
+  pinComment,
+  deleteComment,
   hashIP,
 } from '../lib/db'
 
 type Bindings = {
   DB: D1Database
+  ADMIN_TOKEN: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+/**
+ * 管理员权限校验
+ */
+const isAdmin = (c: any) => {
+  const token =
+    c.req.header('Authorization')?.replace('Bearer ', '') ||
+    c.req.query('token')
+  const adminToken = c.env.ADMIN_TOKEN
+
+  if (!adminToken) {
+    console.warn('ADMIN_TOKEN is not set in environment')
+    return false
+  }
+
+  return token === adminToken || token === `Bearer ${adminToken}`
+}
 
 /**
  * GET /comments?path=/posts/xxx
@@ -182,6 +202,67 @@ app.get('/count', async c => {
     console.error('获取评论数失败:', error)
     return c.json<ErrorResponse>(
       { error: 'Internal Server Error', message: '获取评论数失败' },
+      500
+    )
+  }
+})
+
+/**
+ * PUT /comments/:id/pin
+ * 置顶评论 (管理员)
+ */
+app.put('/:id/pin', async c => {
+  if (!isAdmin(c)) {
+    return c.json<ErrorResponse>(
+      { error: 'Unauthorized', message: '管理权限验证失败' },
+      401
+    )
+  }
+
+  const id = c.req.param('id')
+  const { is_pinned } = await c.req.json<{ is_pinned: boolean }>()
+
+  try {
+    const db = c.env.DB
+    const result = await pinComment(db, id, is_pinned)
+    return c.json(result)
+  } catch (error) {
+    console.error('置顶失败:', error)
+    return c.json<ErrorResponse>(
+      { error: 'Internal Server Error', message: '操作失败' },
+      500
+    )
+  }
+})
+
+/**
+ * DELETE /comments/:id
+ * 删除评论 (管理员)
+ */
+app.delete('/:id', async c => {
+  if (!isAdmin(c)) {
+    return c.json<ErrorResponse>(
+      { error: 'Unauthorized', message: '管理权限验证失败' },
+      401
+    )
+  }
+
+  const id = c.req.param('id')
+
+  try {
+    const db = c.env.DB
+    const result = await deleteComment(db, id)
+    if (!result.success) {
+      return c.json<ErrorResponse>(
+        { error: 'Not Found', message: '评论不存在' },
+        404
+      )
+    }
+    return c.json({ success: true })
+  } catch (error) {
+    console.error('删除评论失败:', error)
+    return c.json<ErrorResponse>(
+      { error: 'Internal Server Error', message: '操作失败' },
       500
     )
   }

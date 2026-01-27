@@ -75,6 +75,12 @@ export interface ErrorResponse {
   message: string
 }
 
+// 成功响应 (通用)
+export interface SuccessResponse {
+  success: boolean
+  message?: string
+}
+
 // ============ SDK 配置类型 ============
 
 export interface HitalkOptions {
