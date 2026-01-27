@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -20,8 +20,546 @@
     <meta content="telephone=no,email=no" name="format-detection" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge,Chrome=1" />
     <title>Hitalk - A simple comment system based on Leancloud.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./packages/sdk/dist/hitalk.css" />
     <script src="./packages/sdk/dist/hitalk.js"></script>
+    <!-- Prevent flash of wrong theme -->
+    <script>
+      ;(function () {
+        const saved = localStorage.getItem('hitalk-theme')
+        const prefersDark = window.matchMedia(
+          '(prefers-color-scheme: dark)'
+        ).matches
+        const theme = saved || (prefersDark ? 'dark' : 'light')
+        document.documentElement.setAttribute('data-theme', theme)
+      })()
+    </script>
+    <style>
+      /* Dark theme (default) */
+      :root,
+      [data-theme='dark'] {
+        --bg-primary: #0f0f0f;
+        --bg-secondary: #1a1a1a;
+        --bg-tertiary: #242424;
+        --bg-card: rgba(30, 30, 30, 0.8);
+        --text-primary: #ffffff;
+        --text-secondary: #a0a0a0;
+        --text-muted: #666666;
+        --accent: #f59e0b;
+        --accent-hover: #fbbf24;
+        --accent-glow: rgba(245, 158, 11, 0.3);
+        --border: rgba(255, 255, 255, 0.08);
+        --border-hover: rgba(255, 255, 255, 0.15);
+        --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 16px 64px rgba(0, 0, 0, 0.5);
+        --glow-color-1: rgba(245, 158, 11, 0.15);
+        --glow-color-2: rgba(220, 38, 38, 0.08);
+        --glow-color-3: rgba(245, 158, 11, 0.06);
+        --noise-opacity: 0.03;
+      }
+
+      /* Light theme */
+      [data-theme='light'] {
+        --bg-primary: #fafafa;
+        --bg-secondary: #f5f5f5;
+        --bg-tertiary: #eeeeee;
+        --bg-card: rgba(255, 255, 255, 0.9);
+        --text-primary: #1a1a1a;
+        --text-secondary: #666666;
+        --text-muted: #999999;
+        --accent: #ea580c;
+        --accent-hover: #f97316;
+        --accent-glow: rgba(234, 88, 12, 0.2);
+        --border: rgba(0, 0, 0, 0.08);
+        --border-hover: rgba(0, 0, 0, 0.15);
+        --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 16px 64px rgba(0, 0, 0, 0.12);
+        --glow-color-1: rgba(245, 158, 11, 0.08);
+        --glow-color-2: rgba(251, 191, 36, 0.06);
+        --glow-color-3: rgba(234, 88, 12, 0.04);
+        --noise-opacity: 0.015;
+      }
+
+      :root {
+        --radius: 16px;
+        --radius-sm: 8px;
+        --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.6;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* Animated gradient background */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background:
+          radial-gradient(
+            ellipse 80% 50% at 50% -20%,
+            var(--glow-color-1),
+            transparent
+          ),
+          radial-gradient(
+            ellipse 60% 40% at 100% 100%,
+            var(--glow-color-2),
+            transparent
+          ),
+          radial-gradient(
+            ellipse 50% 30% at 0% 80%,
+            var(--glow-color-3),
+            transparent
+          );
+        pointer-events: none;
+        z-index: -1;
+        transition: background var(--transition);
+      }
+
+      /* Noise texture overlay */
+      body::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+        opacity: var(--noise-opacity);
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      .market {
+        display: none;
+      }
+
+      /* Header */
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
+        border-bottom: 1px solid var(--border);
+      }
+
+      header .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .logo {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text-primary);
+        text-decoration: none;
+        letter-spacing: -0.5px;
+        position: relative;
+        transition: var(--transition);
+      }
+
+      .logo::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+        border-radius: 2px;
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform var(--transition);
+      }
+
+      .logo:hover {
+        color: var(--accent);
+      }
+
+      .logo:hover::after {
+        transform: scaleX(1);
+      }
+
+      .sub {
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 400;
+        opacity: 0.8;
+      }
+
+      /* Article section */
+      .article {
+        max-width: 900px;
+        margin: 48px auto;
+        padding: 0 24px;
+      }
+
+      .article p {
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 24px;
+        line-height: 1.7;
+      }
+
+      .article ul {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+      }
+
+      .article li {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 16px 20px;
+        font-size: 15px;
+        color: var(--text-secondary);
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .article li::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 3px;
+        height: 100%;
+        background: linear-gradient(180deg, var(--accent), transparent);
+        opacity: 0;
+        transition: opacity var(--transition);
+      }
+
+      .article li:hover {
+        background: var(--bg-tertiary);
+        border-color: var(--border-hover);
+        transform: translateX(4px);
+      }
+
+      .article li:hover::before {
+        opacity: 1;
+      }
+
+      /* Main container */
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .placeholder {
+        display: none;
+      }
+
+      .content {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 32px;
+        margin-bottom: 48px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
+
+      /* GitHub buttons */
+      #github {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      #github iframe {
+        opacity: 0.9;
+        transition: opacity var(--transition);
+      }
+
+      #github iframe:hover {
+        opacity: 1;
+      }
+
+      /* Comment counts */
+      .post-comments-count {
+        display: inline-block;
+        background: var(--bg-tertiary);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-right: 8px;
+        margin-bottom: 16px;
+        border: 1px solid var(--border);
+        transition: var(--transition);
+      }
+
+      .post-comments-count:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* Comment section */
+      #comment {
+        margin-top: 24px;
+      }
+
+      /* Footer */
+      .copy {
+        text-align: center;
+        padding: 32px 24px 48px;
+        color: var(--text-muted);
+        font-size: 14px;
+        border-top: 1px solid var(--border);
+        background: color-mix(in srgb, var(--bg-primary) 50%, transparent);
+      }
+
+      .copy a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+        transition: var(--transition);
+        position: relative;
+      }
+
+      .copy a::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background: var(--accent);
+        transform: scaleX(0);
+        transform-origin: right;
+        transition: transform var(--transition);
+      }
+
+      .copy a:hover {
+        color: var(--accent-hover);
+      }
+
+      .copy a:hover::after {
+        transform: scaleX(1);
+        transform-origin: left;
+      }
+
+      /* Animations */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .article,
+      .content {
+        animation: fadeInUp 0.6s ease-out;
+      }
+
+      .article li {
+        animation: fadeInUp 0.5s ease-out;
+        animation-fill-mode: both;
+      }
+
+      .article li:nth-child(1) {
+        animation-delay: 0.1s;
+      }
+
+      .article li:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+
+      .article li:nth-child(3) {
+        animation-delay: 0.2s;
+      }
+
+      .article li:nth-child(4) {
+        animation-delay: 0.25s;
+      }
+
+      .article li:nth-child(5) {
+        animation-delay: 0.3s;
+      }
+
+      .article li:nth-child(6) {
+        animation-delay: 0.35s;
+      }
+
+      /* Responsive */
+      @media (max-width: 640px) {
+        header .container {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+        }
+
+        .logo {
+          font-size: 24px;
+        }
+
+        .article {
+          margin: 32px auto;
+        }
+
+        .article p {
+          font-size: 16px;
+        }
+
+        .article ul {
+          grid-template-columns: 1fr;
+        }
+
+        .content {
+          padding: 20px;
+          border-radius: var(--radius-sm);
+        }
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--bg-secondary);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--bg-tertiary);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+      }
+
+      /* Selection */
+      ::selection {
+        background: var(--accent);
+        color: var(--bg-primary);
+      }
+
+      /* Theme toggle button */
+      .theme-toggle {
+        margin-left: auto;
+        width: 44px;
+        height: 44px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg-tertiary);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--accent);
+        background: var(--bg-secondary);
+        transform: scale(1.05);
+      }
+
+      .theme-toggle:active {
+        transform: scale(0.95);
+      }
+
+      .theme-toggle svg {
+        width: 22px;
+        height: 22px;
+        color: var(--text-primary);
+        transition: var(--transition);
+      }
+
+      .theme-toggle .icon-sun,
+      .theme-toggle .icon-moon {
+        position: absolute;
+        transition:
+          opacity var(--transition),
+          transform var(--transition);
+      }
+
+      /* Dark theme: show sun icon */
+      [data-theme='dark'] .theme-toggle .icon-sun {
+        opacity: 1;
+        transform: rotate(0deg) scale(1);
+      }
+
+      [data-theme='dark'] .theme-toggle .icon-moon {
+        opacity: 0;
+        transform: rotate(-90deg) scale(0.5);
+      }
+
+      /* Light theme: show moon icon */
+      [data-theme='light'] .theme-toggle .icon-sun {
+        opacity: 0;
+        transform: rotate(90deg) scale(0.5);
+      }
+
+      [data-theme='light'] .theme-toggle .icon-moon {
+        opacity: 1;
+        transform: rotate(0deg) scale(1);
+      }
+
+      /* Smooth theme transition */
+      html {
+        transition: background-color 0s;
+      }
+
+      html.theme-transitioning,
+      html.theme-transitioning *,
+      html.theme-transitioning *::before,
+      html.theme-transitioning *::after {
+        transition-duration: 0.4s !important;
+      }
+    </style>
   </head>
 
   <body>
@@ -30,6 +568,42 @@
       <div class="container">
         <a href="./" class="logo">Hitalk</a>
         <span class="sub">A simple comment system based on Leancloud.</span>
+        <button
+          class="theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle theme"
+        >
+          <!-- Sun icon (for dark mode - click to switch to light) -->
+          <svg
+            class="icon-sun"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+            />
+          </svg>
+          <!-- Moon icon (for light mode - click to switch to dark) -->
+          <svg
+            class="icon-moon"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+            />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -127,6 +701,41 @@
           'https://ghbtns.com/github-btn.html?user=ihoey&type=follow&count=true'
         )
       }
+
+      // Theme toggle functionality
+      const themeToggle = document.getElementById('theme-toggle')
+
+      function setTheme(theme, withTransition = true) {
+        if (withTransition) {
+          document.documentElement.classList.add('theme-transitioning')
+        }
+
+        document.documentElement.setAttribute('data-theme', theme)
+        localStorage.setItem('hitalk-theme', theme)
+
+        if (withTransition) {
+          setTimeout(() => {
+            document.documentElement.classList.remove('theme-transitioning')
+          }, 400)
+        }
+      }
+
+      function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme')
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark'
+        setTheme(newTheme)
+      }
+
+      themeToggle.addEventListener('click', toggleTheme)
+
+      // Listen for system theme changes
+      window
+        .matchMedia('(prefers-color-scheme: dark)')
+        .addEventListener('change', e => {
+          if (!localStorage.getItem('hitalk-theme')) {
+            setTheme(e.matches ? 'dark' : 'light')
+          }
+        })
     </script>
   </body>
 </html>
