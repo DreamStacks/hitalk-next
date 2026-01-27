@@ -99,3 +99,48 @@ export interface UserInfo {
   email: string
   website: string
 }
+
+// ============ 插件系统类型 ============
+
+/**
+ * 插件钩子上下文
+ */
+export interface PluginContext {
+  env: any // 环境变量
+  db: any // 数据库实例
+}
+
+/**
+ * 插件钩子定义
+ */
+export interface PluginHooks {
+  /**
+   * 评论创建后触发
+   * @param comment 新创建的评论
+   * @param page 评论所在页面
+   * @param parent 父级评论(如果有)
+   */
+  onCommentCreated?: (
+    ctx: PluginContext,
+    comment: Comment,
+    page: Page,
+    parent?: Comment
+  ) => Promise<void> | void
+
+  /**
+   * 评论被点赞后触发
+   */
+  onCommentLiked?: (
+    ctx: PluginContext,
+    comment: Comment,
+    likeCount: number
+  ) => Promise<void> | void
+}
+
+/**
+ * 插件基础接口
+ */
+export interface HitalkPlugin extends PluginHooks {
+  name: string
+  version?: string
+}

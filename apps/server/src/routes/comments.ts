@@ -19,8 +19,10 @@ import {
   getCommentCounts,
   pinComment,
   deleteComment,
+  getCommentById,
   hashIP,
 } from '../lib/db'
+import { pluginManager } from '../lib/plugin-manager'
 
 type Bindings = {
   DB: D1Database
@@ -134,7 +136,26 @@ app.post('/', async c => {
       content_html,
       ua,
       ip_hash,
+      is_admin: isAdmin(c),
     })
+
+    // 异步触发插件 (不阻塞响应)
+    c.executionCtx.waitUntil(
+      (async () => {
+        let parentComment = undefined
+        if (body.parent_id) {
+          parentComment =
+            (await getCommentById(db, body.parent_id)) || undefined
+        }
+        await pluginManager.trigger(
+          'onCommentCreated',
+          { env: c.env, db },
+          comment,
+          page,
+          parentComment
+        )
+      })()
+    )
 
     return c.json(comment, 201)
   } catch (error) {

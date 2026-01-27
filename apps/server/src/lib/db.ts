@@ -122,6 +122,26 @@ export async function createComment(
 }
 
 /**
+ * 根据 ID 获取单条评论
+ */
+export async function getCommentById(
+  db: D1Database,
+  id: string
+): Promise<Comment | null> {
+  const comment = await db
+    .prepare('SELECT * FROM comments WHERE id = ?')
+    .bind(id)
+    .first<Comment>()
+
+  if (comment) {
+    comment.created_at = formatTimestamp(comment.created_at)
+    comment.updated_at = formatTimestamp(comment.updated_at)
+  }
+
+  return comment
+}
+
+/**
  * 获取评论列表(按页面)
  */
 export async function getComments(

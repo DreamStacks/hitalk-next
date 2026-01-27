@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import comments from './routes/comments'
 import admin from './routes/admin'
+import { initPlugins } from './plugins'
 
 type Bindings = {
   DB: D1Database
@@ -9,6 +10,9 @@ type Bindings = {
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// 初始化插件系统
+initPlugins()
 
 // CORS 配置
 app.use(
