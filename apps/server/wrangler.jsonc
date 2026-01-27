@@ -1,38 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "server",
+  "name": "hitalk-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-01-26",
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "hitalk",
+      "database_id": "placeholder",
+      "preview_database_id": "placeholder",
+    },
+    {
+      "binding": "hitalk",
+      "database_name": "hitalk",
+      "database_id": "a4cdba1f-2f54-4add-8125-49bd14d44f0c",
+      "remote": true,
+    },
+  ],
 }
