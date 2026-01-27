@@ -1,10 +1,51 @@
 /* Hitalk v2 样式 - 从 v1 迁移并优化 */
 
+:root {
+  --ht-accent: #3090e4;
+  --ht-danger: #eb5055;
+  --ht-tag-bg: #ff6b6b;
+  --ht-tag-color: #ffffff;
+
+  /* Default Light Theme */
+  --ht-bg: #ffffff;
+  --ht-text: #4a4a4a;
+  --ht-header: #2c2020;
+  --ht-muted: #999999;
+  --ht-border: #f0f0f0;
+  --ht-border-dashed: #dedede;
+  --ht-input-bg: transparent;
+  --ht-btn-bg: #ededed;
+  --ht-btn-text: #313131;
+  --ht-card-border: #f5f5f5;
+  --ht-code-bg: #f5f2f2;
+  --ht-code-text: #555555;
+  --ht-smiles-bg: #ffffff;
+  --ht-smiles-bar: #f9f9f9;
+}
+
+[data-theme='dark'] {
+  --ht-bg: #1a1a1a;
+  --ht-text: #cccccc;
+  --ht-header: #eeeeee;
+  --ht-muted: #777777;
+  --ht-border: #333333;
+  --ht-border-dashed: #444444;
+  --ht-input-bg: #242424;
+  --ht-btn-bg: #333333;
+  --ht-btn-text: #eeeeee;
+  --ht-card-border: #2a2a2a;
+  --ht-code-bg: #2d2d2d;
+  --ht-code-text: #bbbbbb;
+  --ht-smiles-bg: #242424;
+  --ht-smiles-bar: #1a1a1a;
+}
+
 .Hitalk {
   box-sizing: border-box;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
     Cantarell, sans-serif;
+  color: var(--ht-text);
 }
 
 .Hitalk *,
@@ -30,11 +71,12 @@
 
 /* 评论框容器 */
 .Hitalk .vwrap {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--ht-border);
   border-radius: 4px;
   margin-bottom: 10px;
   position: relative;
   padding: 10px;
+  background: var(--ht-input-bg);
 }
 
 /* 欢迎信息 */
@@ -42,13 +84,13 @@
   position: relative;
   padding-bottom: 10px;
   font-size: 0.875rem;
-  color: #757575;
-  border-bottom: 1px #dedede dashed;
+  color: var(--ht-muted);
+  border-bottom: 1px var(--ht-border-dashed) dashed;
   user-select: none;
 }
 
 .Hitalk .welcome span {
-  color: #9499a8;
+  color: var(--ht-accent);
   cursor: pointer;
 }
 
@@ -66,11 +108,12 @@
 .Hitalk .vheader .vinput {
   flex: 1;
   min-width: 200px;
-  border-bottom: 1px #dedede dashed;
+  border-bottom: 1px var(--ht-border-dashed) dashed;
+  color: var(--ht-header);
 }
 
 .Hitalk .vheader .vinput:focus {
-  border-bottom-color: #eb5055;
+  border-bottom-color: var(--ht-danger);
 }
 
 /* 编辑器 */
@@ -78,9 +121,10 @@
   width: 100%;
   min-height: 140px;
   font-size: 0.875rem;
-  border-bottom: 1px dashed #dedede;
+  border-bottom: 1px dashed var(--ht-border-dashed);
   background: url(https://cdn.ihoey.com/plbj.png) right bottom no-repeat;
   padding: 10px 0;
+  color: var(--ht-text);
 }
 
 /* 控制栏 */
@@ -110,19 +154,19 @@
   vertical-align: middle;
   user-select: none;
   cursor: pointer;
-  border: 1px solid #ededed;
+  border: 1px solid var(--ht-btn-bg);
   border-radius: 0.5rem;
-  background: #ededed;
-  color: #313131;
+  background: var(--ht-btn-bg);
+  color: var(--ht-btn-text);
   outline: none;
   transition: all 0.3s;
 }
 
 .Hitalk .vbtn:hover,
 .Hitalk .vbtn:active {
-  color: #3090e4;
-  border-color: #3090e4;
-  background-color: #fff;
+  color: var(--ht-accent);
+  border-color: var(--ht-accent);
+  background-color: var(--ht-bg);
 }
 
 .Hitalk .vbtn:disabled {
@@ -163,7 +207,7 @@
 .Hitalk .info .count .num {
   font-weight: 600;
   font-size: 1.25rem;
-  color: #333;
+  color: var(--ht-header);
 }
 
 /* Loading */
@@ -181,7 +225,7 @@
 }
 
 .Hitalk .spinner > div {
-  background-color: #9c9c9c;
+  background-color: var(--ht-muted);
   height: 100%;
   width: 6px;
   margin-right: 1px;
@@ -221,7 +265,7 @@
 .Hitalk .vempty {
   padding: 20px;
   text-align: center;
-  color: #999;
+  color: var(--ht-muted);
 }
 
 /* 评论列表 */
@@ -261,7 +305,7 @@
   flex: 1;
   min-width: 0;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--ht-card-border);
 }
 
 .Hitalk .vhead {
@@ -272,27 +316,27 @@
 .Hitalk .vhead a {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #2c2020;
+  color: var(--ht-header);
   text-decoration: none;
   margin-right: 10px;
 }
 
 .Hitalk .vhead a:hover {
-  color: #d7191a;
+  color: var(--ht-accent);
 }
 
 .Hitalk .vpin {
   display: inline-block;
   padding: 2px 6px;
-  background: #ff6b6b;
-  color: #fff;
+  background: var(--ht-tag-bg);
+  color: var(--ht-tag-color);
   font-size: 0.75rem;
   border-radius: 3px;
   margin-right: 8px;
 }
 
 .Hitalk .vtime {
-  color: #b3b3b3;
+  color: var(--ht-muted);
   font-size: 0.75rem;
 }
 
@@ -300,7 +344,7 @@
   word-wrap: break-word;
   word-break: break-word;
   text-align: justify;
-  color: #4a4a4a;
+  color: var(--ht-text);
   font-size: 0.875rem;
   line-height: 1.8;
   position: relative;
@@ -318,23 +362,23 @@
 }
 
 .Hitalk .vcontent a {
-  color: #708090;
+  color: var(--ht-accent);
   text-decoration: underline;
 }
 
 .Hitalk .vcontent a:hover {
-  color: #d7191a;
+  color: var(--ht-danger);
 }
 
 .Hitalk .vcontent code,
 .Hitalk .vcontent pre {
   display: inline-block;
   padding: 2px 8px;
-  background: #f5f2f2;
+  background: var(--ht-code-bg);
   border-radius: 3px;
   font-size: 0.875rem;
   font-family: 'Courier New', monospace;
-  color: #555;
+  color: var(--ht-code-text);
 }
 
 .Hitalk .vcontent.expand {
@@ -353,8 +397,8 @@
   height: 50px;
   line-height: 50px;
   text-align: center;
-  background: linear-gradient(transparent, rgba(255, 255, 255, 0.95));
-  color: #828586;
+  background: linear-gradient(transparent, var(--ht-bg));
+  color: var(--ht-muted);
 }
 
 .Hitalk .vfooter {
@@ -368,13 +412,13 @@
   align-items: center;
   gap: 4px;
   font-size: 0.8125rem;
-  color: #999;
+  color: var(--ht-muted);
   cursor: pointer;
   user-select: none;
 }
 
 .Hitalk .vlike:hover {
-  color: #ff6b6b;
+  color: var(--ht-tag-bg);
 }
 
 .Hitalk .vlike-icon {
@@ -384,7 +428,7 @@
 
 .Hitalk .vat {
   font-size: 0.8125rem;
-  color: #ef2f11;
+  color: var(--ht-danger);
   cursor: pointer;
   user-select: none;
 }
@@ -414,12 +458,12 @@
 .Hitalk .smiles-logo {
   cursor: pointer;
   user-select: none;
-  color: #999;
+  color: var(--ht-muted);
   font-size: 1.2rem;
 }
 
 .Hitalk .smiles-logo:hover {
-  color: #333;
+  color: var(--ht-header);
 }
 
 .Hitalk .smiles-body {
@@ -429,8 +473,8 @@
   left: 0;
   width: 380px;
   max-height: 300px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--ht-smiles-bg);
+  border: 1px solid var(--ht-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 100;
@@ -470,9 +514,9 @@
 }
 
 .Hitalk .smiles-bar {
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--ht-border);
   padding: 8px 10px;
-  background: #f9f9f9;
+  background: var(--ht-smiles-bar);
   border-radius: 0 0 6px 6px;
 }
 
@@ -489,21 +533,22 @@
   cursor: pointer;
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #666;
+  color: var(--ht-text);
   transition: all 0.2s;
 }
 
 .Hitalk .smiles-name:hover {
-  background: #e0e0e0;
+  background: var(--ht-border);
 }
 
 .Hitalk .smiles-package-active {
-  background: #3090e4;
+  background: var(--ht-accent);
   color: #fff;
 }
 
 .Hitalk .smiles-package-active:hover {
-  background: #2080d4;
+  background: var(--ht-accent);
+  opacity: 0.9;
 }
 
 /* 分页 */
@@ -517,18 +562,18 @@
   display: inline-block;
   padding: 6px 12px;
   margin: 0 3px;
-  color: #666;
+  color: var(--ht-text);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.2s;
 }
 
 .Hitalk .page-numbers:hover {
-  background: #f0f0f0;
+  background: var(--ht-border);
 }
 
 .Hitalk .page-numbers.current {
-  background: #3090e4;
+  background: var(--ht-accent);
   color: #fff;
   cursor: default;
 }
