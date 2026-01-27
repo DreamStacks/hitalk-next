@@ -1,50 +1,39 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hitalk v2 测试页面</title>
-    <style>
-      body {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 20px;
-        font-family:
-          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        line-height: 1.6;
-      }
-
-      h1 {
-        color: #333;
-        border-bottom: 2px solid #3090e4;
-        padding-bottom: 10px;
-      }
-
-      .article {
-        background: #f9f9f9;
-        padding: 20px;
-        border-radius: 8px;
-        margin-bottom: 30px;
-      }
-
-      .article h2 {
-        margin-top: 0;
-      }
-
-      #comment {
-        margin-top: 40px;
-      }
-    </style>
-
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta
+      name="keywords"
+      content="Hitalk,极简风,评论系统,极简风评论系统,comment system"
+    />
+    <meta
+      name="description"
+      content="Hitalk - 一款基于Leancloud的极简风评论系统"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta content="telephone=no,email=no" name="format-detection" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,Chrome=1" />
+    <title>Hitalk - A simple comment system based on Leancloud.</title>
     <link rel="stylesheet" href="./packages/sdk/dist/hitalk.css" />
+    <script src="./packages/sdk/dist/hitalk.js"></script>
   </head>
 
   <body>
-    <h1>Hitalk v2 测试页面</h1>
+    <div class="market"></div>
+    <header>
+      <div class="container">
+        <a href="./" class="logo">Hitalk</a>
+        <span class="sub">A simple comment system based on Leancloud.</span>
+      </div>
+    </header>
 
     <div class="article">
-      <h2>测试文章标题</h2>
-      <p>这是一篇用于测试 Hitalk v2 评论系统的文章。</p>
       <p>Hitalk v2 是一款全新重写的评论系统,具有以下特性:</p>
       <ul>
         <li>✅ 前后端彻底解耦,基于 REST API</li>
@@ -56,35 +45,63 @@
       </ul>
     </div>
 
-    <!-- 评论容器 -->
-    <div id="comment"></div>
+    <div class="container">
+      <div class="placeholder"></div>
+      <div class="content">
+        <div id="github">
+          <iframe
+            allowtransparency="true"
+            frameborder="0"
+            scrolling="0"
+            width="98"
+            height="20"
+          ></iframe>
+          <iframe
+            allowtransparency="true"
+            frameborder="0"
+            scrolling="0"
+            width="156"
+            height="20"
+          ></iframe>
+        </div>
+        <div>
+          <span
+            class="post-comments-count hitalk-comment-count"
+            data-xid="/"
+            itemprop="commentCount"
+          ></span>
+          <span
+            class="post-comments-count hitalk-comment-count"
+            data-xid="/posts/javascript/PWA/2019-02-18-progressive-web-apps-blog.html"
+            itemprop="commentCount"
+          ></span>
+          <span
+            class="post-comments-count hitalk-comment-count"
+            data-xid="/posts/Hexo/2018-05-27-hexo-code-block.html"
+            itemprop="commentCount"
+          ></span>
+        </div>
+        <!-- 评论数量 -->
+        <div id="comment"></div>
+      </div>
+    </div>
+    <div class="copy">
+      &copy; 2026
+      <a href="https://github.com/Ihoey" target="_blank">梦魇小栈</a>
+    </div>
 
-    <!-- 开发环境:使用本地构建的 SDK -->
-    <!-- 生产环境:使用 CDN 上的 SDK -->
-    <script type="module">
-      // 在实际使用时,这里应该导入构建后的 SDK
-      // import { mount } from './dist/hitalk.esm.js'
-
-      // 开发环境临时方案:直接使用 fetch API 测试后端
-      console.log('Hitalk v2 测试页面加载完成')
-      console.log('请在构建 SDK 后刷新此页面进行测试')
-
-      // // 临时说明
-      // document.getElementById('comment').innerHTML = `
-      //   <div style="padding: 20px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
-      //     <h3 style="margin-top: 0; color: #856404;">⚠️ 开发提示</h3>
-      //     <p style="margin-bottom: 0;">
-      //       SDK 尚未构建。请按以下步骤操作:
-      //     </p>
-      //     <ol>
-      //       <li>启动后端服务: <code>cd apps/server && pnpm dev</code></li>
-      //       <li>创建数据库: <code>pnpm run db:init</code></li>
-      //       <li>构建 SDK: <code>cd packages/sdk && pnpm install && pnpm build</code></li>
-      //       <li>刷新此页面</li>
-      //     </ol>
-      //   </div>
-      // `
-
+    <script>
+      Hitalk.mount('#comment', {
+        server: 'http://localhost:8787', // 开发环境
+        // server: 'https://your-worker.workers.dev',  // 生产环境
+        path: location.pathname,
+        title: document.title,
+        placeholder: '说点什么吧...',
+        avatar: 'mm',
+        pageSize: 10,
+      })
+    </script>
+    <script>
       // 测试后端 API
       async function testBackend() {
         try {
@@ -98,21 +115,18 @@
       }
 
       testBackend()
-    </script>
 
-    // 生产环境使用示例(SDK 构建完成后):
-
-    <script src="./packages/sdk/dist/hitalk.js"></script>
-    <script>
-      Hitalk.mount('#comment', {
-        server: 'http://localhost:8787', // 开发环境
-        // server: 'https://your-worker.workers.dev',  // 生产环境
-        path: location.pathname,
-        title: document.title,
-        placeholder: '说点什么吧...',
-        avatar: 'mm',
-        pageSize: 10,
-      })
+      window.onload = function () {
+        var iframe = document.querySelectorAll('iframe')
+        iframe[0].setAttribute(
+          'src',
+          'https://ghbtns.com/github-btn.html?user=ihoey&repo=Hitalk&type=watch&count=true'
+        )
+        iframe[1].setAttribute(
+          'src',
+          'https://ghbtns.com/github-btn.html?user=ihoey&type=follow&count=true'
+        )
+      }
     </script>
   </body>
 </html>
