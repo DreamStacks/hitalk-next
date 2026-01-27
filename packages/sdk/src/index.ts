@@ -16,6 +16,7 @@ export class Hitalk {
   private store: Store
   private container: HTMLElement
   private editor: Editor | null = null
+  private editorContainer: HTMLElement | null = null
   private loading: Loading | null = null
   private commentList: CommentList | null = null
   private options: Required<HitalkOptions>
@@ -73,15 +74,16 @@ export class Hitalk {
     `
 
     // 初始化 Editor 组件
-    const editorContainer = this.container.querySelector(
+    this.editorContainer = this.container.querySelector(
       '.editor-container'
     ) as HTMLElement
-    if (editorContainer) {
+    if (this.editorContainer) {
       this.editor = new Editor(
-        editorContainer,
+        this.editorContainer,
         this.store.getUserInfo(),
         this.options.placeholder,
-        data => this.handleSubmit(data)
+        data => this.handleSubmit(data),
+        () => this.handleCancelReply()
       )
     }
 
@@ -176,17 +178,19 @@ export class Hitalk {
         parent_id: replyTarget?.id,
       })
 
+      // 先移动回顶部，防止 store 更新触发 updateUI 导致编辑器所在的 DOM 节点被销毁
+      this.handleCancelReply()
+
       // 保存用户信息
       if (nick !== 'Guest') {
         this.store.setUserInfo({ nick, email, website })
       }
 
-      // 添加到列表
-      this.store.addComment(comment)
-
       // 清空表单
       this.editor?.clear()
-      this.store.setReplyTarget(null)
+
+      // 添加到列表
+      this.store.addComment(comment)
 
       // 重新加载评论(刷新树结构)
       await this.loadComments()
@@ -213,11 +217,55 @@ export class Hitalk {
    */
   private handleReply(id: string, nick: string) {
     this.store.setReplyTarget({ id, nick })
-    const editor = this.container.querySelector(
-      '.veditor'
-    ) as HTMLTextAreaElement
-    editor.focus()
-    editor.placeholder = `回复 @${nick}`
+
+    // 找到当前点击的评论
+    const commentEl = this.container.querySelector(`.vcard#${id} > section`)
+    if (commentEl && this.editorContainer) {
+      // 移动编辑器到评论下方
+      commentEl.appendChild(this.editorContainer)
+
+      // 修改 placeholder 并聚焦
+      const editorInput = this.editorContainer.querySelector(
+        '.veditor'
+      ) as HTMLTextAreaElement
+      if (editorInput) {
+        editorInput.placeholder = `回复 @${nick}`
+        editorInput.focus()
+      }
+
+      // 显示取消按钮
+      const cancelBtn = this.editorContainer.querySelector('.vcancel-reply')
+      cancelBtn?.classList.remove('dn')
+    }
+  }
+
+  /**
+   * 取消回复，编辑器回到顶部
+   */
+  private handleCancelReply() {
+    this.store.setReplyTarget(null)
+
+    if (this.editorContainer) {
+      // 移动回顶部
+      const firstChild = this.container.firstChild
+      if (firstChild && firstChild !== this.editorContainer) {
+        this.container.insertBefore(this.editorContainer, firstChild)
+      } else if (!firstChild) {
+        this.container.appendChild(this.editorContainer)
+      }
+
+      // 重置 placeholder
+      const editorInput = this.editorContainer.querySelector(
+        '.veditor'
+      ) as HTMLTextAreaElement
+      if (editorInput) {
+        editorInput.placeholder = this.options.placeholder
+      }
+
+      // 隐藏取消按钮
+      const cancelBtn = this.editorContainer.querySelector('.vcancel-reply')
+      cancelBtn?.classList.add('dn')
+    }
   }
 
   /**

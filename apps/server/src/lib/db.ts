@@ -143,31 +143,59 @@ export async function getComments(
 }
 
 /**
- * 构建评论 tree
+ * 构建评论 tree (两级扁平化结构)
+ * 所有深层嵌套的回复都会被平铺在根评论的 children 中
  */
 export function buildCommentTree(comments: Comment[]): Comment[] {
   const commentMap = new Map<string, Comment>()
   const rootComments: Comment[] = []
 
-  // 初始化
+  // 1. 初始化所有评论，并按 ID 索引
   comments.forEach(comment => {
     commentMap.set(comment.id, { ...comment, children: [] })
   })
 
-  // 构建
+  // 2. 第一遍：找根评论
   comments.forEach(comment => {
-    const node = commentMap.get(comment.id)!
+    if (!comment.parent_id) {
+      rootComments.push(commentMap.get(comment.id)!)
+    }
+  })
 
+  // 3. 第二遍：将所有回复分配给其所属的根评论
+  comments.forEach(comment => {
     if (comment.parent_id) {
-      const parent = commentMap.get(comment.parent_id)
-      if (parent) {
-        parent.children = parent.children || []
-        parent.children.push(node)
-      } else {
-        rootComments.push(node)
+      // 溯源：找到这笔评论所属的根评论
+      let currentParentId = comment.parent_id
+      let root: Comment | undefined
+
+      while (currentParentId) {
+        const parent = commentMap.get(currentParentId)
+        if (!parent) break
+        if (!parent.parent_id) {
+          root = parent
+          break
+        }
+        currentParentId = parent.parent_id
       }
-    } else {
-      rootComments.push(node)
+
+      if (root) {
+        root.children = root.children || []
+        root.children.push(commentMap.get(comment.id)!)
+      } else {
+        // 如果找不到根(理论上不应该发生)，则作为根评论
+        rootComments.push(commentMap.get(comment.id)!)
+      }
+    }
+  })
+
+  // 4. 对 children 按时间升序排序(回复通常按时间正序排列)
+  rootComments.forEach(root => {
+    if (root.children) {
+      root.children.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
     }
   })
 

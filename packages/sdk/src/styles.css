@@ -439,12 +439,21 @@
 
 /* 嵌套评论 */
 .Hitalk .vchildren {
-  margin-left: 52px;
   margin-top: 1rem;
+  border-top: 1px dashed var(--ht-border);
 }
 
 .Hitalk .vchildren .vcard {
   padding-top: 1rem;
+}
+
+.Hitalk .vchildren .vimg {
+  width: 32px;
+  height: 32px;
+}
+
+.Hitalk .vchildren section {
+  padding-bottom: 0.5rem;
 }
 
 /* 表情选择器 */

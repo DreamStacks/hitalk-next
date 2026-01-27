@@ -160,7 +160,7 @@ A: 检查:
 
 ## 下一步
 
-- 查看 [README.md](../README.md) 了解完整文档
+- 查看 [README.md](./README.md) 了解完整文档
 - 查看 [walkthrough.md](./.gemini/antigravity/brain/*/walkthrough.md) 了解实现细节
 - 参考 [plan.md](./plan.md) 了解设计原理
 

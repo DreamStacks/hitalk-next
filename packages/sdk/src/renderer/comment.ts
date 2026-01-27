@@ -16,7 +16,8 @@ export function renderComment(
   comment: Comment,
   avatarType: string,
   onReply: (id: string, nick: string) => void,
-  onLike: (id: string) => void
+  onLike: (id: string) => void,
+  isChild: boolean = false
 ): string {
   const avatar =
     avatarType === 'hide'
@@ -25,14 +26,20 @@ export function renderComment(
 
   const isPinned = comment.is_pinned ? '<span class="vpin">置顶</span>' : ''
 
-  const children =
-    comment.children && comment.children.length > 0
-      ? `
-    <div class="vchildren">
-      ${comment.children.map(child => renderComment(child, avatarType, onReply, onLike)).join('')}
-    </div>
-  `
-      : ''
+  // 只有非子评论(即根评论)才渲染子评论容器
+  let childrenSection = ''
+  if (!isChild && comment.children && comment.children.length > 0) {
+    const childrenHtml = comment.children
+      .map(child => renderComment(child, avatarType, onReply, onLike, true))
+      .join('')
+    childrenSection = `
+      <div class="vchildren">
+        <ul class="vlist">
+          ${childrenHtml}
+        </ul>
+      </div>
+    `
+  }
 
   return `
     <li class="vcard" id="${comment.id}">
@@ -53,8 +60,8 @@ export function renderComment(
           </span>
           <span class="vat" data-id="${comment.id}" data-nick="${comment.nick}">回复</span>
         </div>
+        ${childrenSection}
       </section>
-      ${children}
     </li>
   `
 }

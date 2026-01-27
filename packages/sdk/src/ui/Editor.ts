@@ -19,14 +19,19 @@ export class Editor {
     container: HTMLElement,
     userInfo: UserInfo | null,
     placeholder: string,
-    onSubmit: (data: any) => void
+    onSubmit: (data: any) => void,
+    onCancel: () => void
   ) {
     this.container = container
     this.onSubmit = onSubmit
-    this.render(userInfo, placeholder)
+    this.render(userInfo, placeholder, onCancel)
   }
 
-  private render(userInfo: UserInfo | null, placeholder: string) {
+  private render(
+    userInfo: UserInfo | null,
+    placeholder: string,
+    onCancel: () => void
+  ) {
     const welcomeSection = userInfo
       ? `
       <div class="welcome">
@@ -54,18 +59,24 @@ export class Editor {
             <div class="smiles-logo"><span>😊</span></div>
             ${renderEmojiPicker()}
           </span>
-          <button type="button" class="vsubmit vbtn">回复</button>
+          <div class="vactions">
+            <button type="button" class="vcancel-reply vbtn dn">取消</button>
+            <button type="button" class="vsubmit vbtn">回复</button>
+          </div>
         </div>
       </div>
     `
 
-    this.bindEvents()
+    this.bindEvents(onCancel)
   }
 
-  private bindEvents() {
+  private bindEvents(onCancel: () => void) {
     // 获取元素
     const submitBtn = this.container.querySelector(
       '.vsubmit'
+    ) as HTMLButtonElement
+    const cancelBtn = this.container.querySelector(
+      '.vcancel-reply'
     ) as HTMLButtonElement
     const editor = this.container.querySelector(
       '.veditor'
@@ -87,6 +98,11 @@ export class Editor {
       const content = editor?.value.trim()
 
       this.onSubmit({ nick, email, website, content })
+    })
+
+    // 取消按钮
+    cancelBtn?.addEventListener('click', () => {
+      onCancel()
     })
 
     // 表情选择 - 使用独立的事件绑定模块
