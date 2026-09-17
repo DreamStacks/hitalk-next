@@ -155,7 +155,7 @@ pnpm preview:web # 本地预览生产构建 http://127.0.0.1:4173
 
 开发模式默认通过 `/api` 访问本地 Worker；生产构建默认直连 `https://hitalk-next-api.ihoey.com`。构建时可用 `VITE_API_URL` 覆盖公开的 API 地址，不要将管理令牌或其他密钥放入 `VITE_` 环境变量。资源使用相对路径，同时适用于 GitHub 项目子路径与独立域名；评论页面标识保持 `/playground`。
 
-仓库包含手动触发的 `Deploy frontend to GitHub Pages` 工作流，检查通过后仅上传 `dist/web`。Pages 使用 GitHub Actions 发布源，从 Actions 选择 `main` 运行该工作流。前端发布地址为 [留言小院](https://dreamstacks.github.io/hitalk-next/)。本仓库已公开，使用 GitHub Free 的 Pages；完整步骤见 [运维说明](docs/operations.md#github-pages-前端)。
+仓库包含手动触发的 `Deploy frontend to GitHub Pages` 工作流，检查通过后仅上传 `dist/web`。Pages 使用 GitHub Actions 发布源，从 Actions 选择 `main` 运行该工作流。前端发布地址为 [留言小院](https://hitalk-next.ihoey.com/)。本仓库已公开，使用 GitHub Free 的 Pages；完整步骤见 [运维说明](docs/operations.md#github-pages-前端)。
 
 首次部署和备份恢复请阅读 [运维说明](docs/operations.md)。不提供旧 API、旧 SDK 或历史数据兼容。
 

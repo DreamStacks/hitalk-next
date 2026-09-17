@@ -9,7 +9,9 @@
 1. 检查仓库是否支持 Pages。GitHub Free 组织只支持公开仓库；私有仓库需要 Team/Enterprise 等适用计划。不要为了启用 Pages 自动公开源码，须由仓库所有者决定。参见 [GitHub Pages 可用范围](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)。
 2. 在仓库 Settings → Pages 中将 Source 设置为 GitHub Actions。
 3. 在 Actions 中选择 `Deploy frontend to GitHub Pages`，选择 `main`，点击 Run workflow。工作流执行完整检查、构建和部署；普通 push 只做 CI 检查，不自动发布。
-4. 默认项目地址为 `https://dreamstacks.github.io/hitalk-next/`，实际地址以成功部署的输出为准。前端使用相对资源路径，之后绑定自定义域名不需要修改资源前缀。
+4. 当前前端域名为 `https://hitalk-next.ihoey.com/`，默认项目地址 `https://dreamstacks.github.io/hitalk-next/` 会跳转到新域名。前端使用相对资源路径，绑定自定义域名不需要修改资源前缀。
+
+域名在仓库 Settings → Pages → Custom domain 中绑定为 `hitalk-next.ihoey.com`。Cloudflare DNS 使用 `CNAME hitalk-next → dreamstacks.github.io`，代理状态为「仅 DNS」，TTL 自动；GitHub 签发证书后启用 Enforce HTTPS。此仓库使用自定义 Actions 工作流，域名由 Pages 设置维护，无需向构建产物添加 `CNAME` 文件，参见 [GitHub 自定义域名文档](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
 
 本地先运行 `pnpm build:web` 和 `pnpm preview:web` 预览生产构建。默认 API 是 `https://hitalk-next-api.ihoey.com`，可在构建时设置 `VITE_API_URL`；Pages 工作流也显式设置了这一公开地址。`VITE_` 变量会写入浏览器产物，只允许公开配置。
 
