@@ -11,4 +11,17 @@
       "migrations_dir": "migrations",
     },
   ],
+  "env": {
+    "production": {
+      "name": "hitalk-server",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "hitalk-next",
+          "database_id": "782bd54d-2e2d-4fff-9778-0e02a7d0655f",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+  },
 }

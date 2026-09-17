@@ -47,17 +47,18 @@ CREATE TABLE comment_likes (
 CREATE TRIGGER comments_parent_insert BEFORE INSERT ON comments
 WHEN NEW.parent_id IS NOT NULL
 BEGIN
-  SELECT CASE WHEN NOT EXISTS (
+  -- WHERE guards avoid CASE/END splitting issues in the remote D1 query parser.
+  SELECT RAISE(ABORT, 'invalid_parent') WHERE NOT EXISTS (
     SELECT 1 FROM comments WHERE id = NEW.parent_id AND page_id = NEW.page_id
-  ) THEN RAISE(ABORT, 'invalid_parent') END;
+  );
 -- Keep headroom for D1 cascade/like/count triggers (verified in workerd tests).
-  SELECT CASE WHEN (
+  SELECT RAISE(ABORT, 'reply_depth_exceeded') WHERE (
     WITH RECURSIVE ancestors(id, parent_id) AS (
       SELECT id, parent_id FROM comments WHERE id = NEW.parent_id
       UNION ALL
       SELECT c.id, c.parent_id FROM comments c JOIN ancestors a ON c.id = a.parent_id
     ) SELECT COUNT(*) FROM ancestors
-  ) >= 8 THEN RAISE(ABORT, 'reply_depth_exceeded') END;
+  ) >= 8;
 END;
 
 -- Moving comments is not supported; preserve an acyclic, single-page tree.

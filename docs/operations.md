@@ -17,12 +17,12 @@ API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `r
 
 ## 首次部署
 
-1. 在 `apps/server` 下运行 `pnpm exec wrangler d1 create hitalk`，将返回的 ID 填入 `wrangler.jsonc` 的唯一 `DB` 绑定。仓库原有数据库 ID 已保留，其他部署者须替换。
+1. 在 `apps/server` 下创建生产 D1 数据库，将 ID 填入 `wrangler.jsonc` 的 `env.production.d1_databases`，绑定名必须为 `DB`。本项目生产库为 `hitalk-next`；默认配置用于本地开发，保留原有本地数据标识。其他部署者须替换生产数据库 ID。
 2. 设置两个不同的随机密钥：
 
    ```sh
-   pnpm --filter @hitalk/server exec wrangler secret put ADMIN_TOKEN
-   pnpm --filter @hitalk/server exec wrangler secret put IP_HASH_SALT
+   pnpm --filter @hitalk/server exec wrangler secret put ADMIN_TOKEN --env production
+   pnpm --filter @hitalk/server exec wrangler secret put IP_HASH_SALT --env production
    ```
 
 3. 执行验证：
@@ -34,11 +34,15 @@ API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `r
    ```
 
 4. 初始化生产库：`pnpm --filter @hitalk/server db:migrate:remote`。
-5. 部署 API：`pnpm --filter @hitalk/server deploy`。
+5. 部署 API：`pnpm --filter @hitalk/server run deploy`（必须保留 `run`，避免调用 pnpm 自带的同名命令）。
 6. 托管本次构建的 SDK JS/CSS，在博客验证提交、回复、点赞、分页、管理删除与移动端。
 7. 公网试运行前配置入口防滥用策略。需要邮件时设置 `RESEND_API_KEY / EMAIL_FROM / SITE_URL / ADMIN_EMAIL`，验证邮件域名及投递。
 
 本地命令默认不连接生产库。Worker 打包检查使用 `deploy --dry-run`，不会发布。`test:worker` 使用临时数据库、测试令牌和空的邮件配置。
+
+2026-09-17 部署时，原远程 `hitalk` 库的三张业务表均为空，但仍采用旧结构；该库已备份并保留。新版创建独立的 `hitalk-next` 库，执行 `0001` / `0002` 迁移，不对旧库重建或删除。生产 Worker 仍名为 `hitalk-server`，使用 `production` 环境配置，域名保持 `hitalk-next-api.ihoey.com`。
+
+首次远程迁移发现 D1 对触发器内 `CASE … END` 的解析与本地执行不同，初始迁移在成功应用前已改为等价的 `SELECT RAISE(...) WHERE ...`。远程迁移及本地约束测试均已通过；此后冻结这两份已执行的迁移，后续结构变更必须新增迁移文件。
 
 ## 数据规则与以后修改结构
 
