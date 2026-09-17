@@ -1,6 +1,6 @@
 import { html, nothing, render } from 'lit-html'
 import { createRef, ref } from 'lit-html/directives/ref.js'
-import type { HitalkOptions } from '@hitalk/shared'
+import { normalizePagePath, type HitalkOptions } from '@hitalk/shared'
 import { HitalkAPI } from './api'
 import { Store } from './store'
 import { Editor, type EditorData } from './ui/Editor'
@@ -10,10 +10,18 @@ import './styles.css'
 
 export type {
   HitalkOptions,
+  GuestField,
+  CommentCountResponse,
   Comment,
   CommentCreateRequest,
   CommentListResponse,
 } from '@hitalk/shared'
+export { normalizePagePath } from '@hitalk/shared'
+export {
+  getCommentCounts,
+  fillCommentCounts,
+  type CommentCountOptions,
+} from './counts'
 const instances = new WeakMap<HTMLElement, Hitalk>()
 
 export class Hitalk {
@@ -51,16 +59,24 @@ export class Hitalk {
     const pageSize = options.pageSize ?? 10
     if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50)
       throw new Error('Hitalk: pageSize 必须为 1–50 的整数')
-    instances.get(el)?.destroy()
-    this.container = el
+    const guestFields =
+      options.guestFields ?? (['nick', 'email', 'website'] as const)
+    if (
+      !Array.isArray(guestFields) ||
+      guestFields.some(field => !['nick', 'email', 'website'].includes(field))
+    )
+      throw new Error('Hitalk: guestFields 只允许 nick、email、website')
     this.options = {
       server: options.server,
-      path: options.path || location.pathname.replace(/index\.(html|htm)$/, ''),
+      path: normalizePagePath(options.path ?? location.pathname),
       title: options.title || document.title,
       placeholder: options.placeholder || '说点什么吧...',
       avatar: options.avatar || 'mm',
       pageSize,
+      guestFields: [...new Set(guestFields)],
     }
+    instances.get(el)?.destroy()
+    this.container = el
     this.api = new HitalkAPI(this.options.server)
     el.classList.add('Hitalk')
     this.view = el.ownerDocument.createElement('div')
@@ -77,13 +93,15 @@ export class Hitalk {
       data => {
         void this.handleSubmit(data)
       },
-      () => this.handleCancelReply()
+      () => this.handleCancelReply(),
+      this.options.guestFields
     )
     this.commentList = new CommentList(
       this.listContainer.value!,
       this.options.avatar,
       {
         onReply: (id, nick) => this.handleReply(id, nick),
+        onLocate: id => this.commentList.locate(id),
         onLike: id => {
           void this.handleLike(id)
         },

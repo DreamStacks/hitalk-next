@@ -74,6 +74,8 @@ export interface SuccessResponse {
 
 // ============ SDK 配置类型 ============
 
+export type GuestField = 'nick' | 'email' | 'website'
+
 export interface HitalkOptions {
   server: string // API 服务器 URL
   path?: string // 页面路径,默认 location.pathname
@@ -81,6 +83,7 @@ export interface HitalkOptions {
   placeholder?: string // 编辑器占位文本
   avatar?: 'mm' | 'identicon' | 'monsterid' | 'wavatar' | 'retro' | 'hide'
   pageSize?: number // 每页根评论数，默认 10，最大 50；回复随根评论返回
+  guestFields?: readonly GuestField[] // 默认全部显示；空数组为匿名评论，不读取隐藏字段的缓存
 }
 
 // ============ 工具类型 ============

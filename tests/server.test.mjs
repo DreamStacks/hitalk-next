@@ -382,6 +382,75 @@ test('Markdown strips active HTML, preserves formatting and emoji', () => {
   assert.ok(html.includes('class="biaoqing newpaopao"'))
 })
 
+test('Markdown preserves tables, alignment, rules and ordered-list start without allowing arbitrary HTML', () => {
+  const html = renderMarkdown(
+    '| Left | Right |\n| :--- | ---: |\n| **one** | two |\n\n---\n\n3. third\n4. fourth\n\n<table onclick="alert(1)"><tr><td>raw</td></tr></table>'
+  )
+  assert.match(html, /<table>/)
+  assert.match(html, /<th align="left">Left<\/th>/)
+  assert.match(html, /<td align="right">two<\/td>/)
+  assert.match(html, /<strong>one<\/strong>/)
+  assert.match(html, /<hr\s*\/?>/)
+  assert.match(html, /<ol start="3">/)
+  assert.ok(!html.includes('<table onclick'))
+  assert.ok(!html.includes('style='))
+})
+
+test('Markdown web links open safely in another tab while comment anchors remain local', () => {
+  const html = renderMarkdown(
+    '[external](https://example.com) [relative](/post/) [cdn](//example.com) [parent](#parent) [email](mailto:reader@example.com)'
+  )
+  for (const href of ['https://example.com', '/post/', '//example.com'])
+    assert.ok(
+      html.includes(
+        `href="${href}" target="_blank" rel="nofollow noopener noreferrer"`
+      )
+    )
+  assert.ok(html.includes('<a href="#parent">parent</a>'))
+  assert.ok(html.includes('<a href="mailto:reader@example.com">email</a>'))
+})
+
+test('path aliases share the same page, reply ownership and canonical counter keys', async t => {
+  const f = fixture(t)
+  const root = await f.create({ path: '/posts/index.html' })
+  await f.create({ path: '/posts/index.htm', parent_id: root.id })
+  for (const path of ['/posts/', '/posts/index.html', '/posts/index.htm']) {
+    const response = await f.request(
+      `/comments?path=${encodeURIComponent(path)}`
+    )
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.page_info.path, '/posts/')
+    assert.equal(body.total, 2)
+    assert.equal(body.comments[0].children[0].parent_id, root.id)
+  }
+  const counts = await (
+    await f.request(
+      '/comments/count?paths[]=/posts/index.html&paths[]=/posts/&paths[]=/posts/index.htm&paths[]=/missing/index.html'
+    )
+  ).json()
+  assert.deepEqual(counts, { '/posts/': 2, '/missing/': 0 })
+  assert.equal(
+    (await f.db.prepare('SELECT COUNT(*) AS total FROM pages').first()).total,
+    1
+  )
+  for (const path of ['/posts/?draft=1', '/posts/#more']) {
+    assert.equal(
+      (await f.request(`/comments?path=${encodeURIComponent(path)}`)).status,
+      400
+    )
+    assert.equal(
+      (await f.request(`/comments/count?paths[]=${encodeURIComponent(path)}`))
+        .status,
+      400
+    )
+    assert.equal(
+      (await f.post({ path, nick: 'Reader', content: 'hello' })).status,
+      400
+    )
+  }
+})
+
 test('IP identifiers are keyed and stable; different installations cannot correlate them', async () => {
   assert.equal(
     await hashIP('192.0.2.1', 'salt-a'),

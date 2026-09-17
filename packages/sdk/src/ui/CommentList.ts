@@ -37,6 +37,19 @@ export class CommentList {
     )
   }
 
+  locate(id: string) {
+    // Scope to this instance: the same article can be mounted more than once on a host page.
+    const target = Array.from(
+      this.container.querySelectorAll<HTMLElement>('.vcard')
+    ).find(element => element.id === id)
+    if (!target) return
+    target
+      .querySelector(':scope > section > .vcontent')
+      ?.classList.remove('expand')
+    target.focus({ preventScroll: true })
+    target.scrollIntoView({ block: 'center', behavior: 'instant' })
+  }
+
   destroy() {
     render(nothing, this.container).setConnected(false)
   }

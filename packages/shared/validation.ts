@@ -23,7 +23,8 @@ export const pagePathSchema = v.pipe(
     path =>
       path.startsWith('/') && !path.startsWith('//') && !/[\s?#\\]/u.test(path),
     'path 必须是以 / 开头、不含查询参数或片段的页面路径'
-  )
+  ),
+  v.transform(path => path.replace(/\/index\.html?$/, '/'))
 )
 const emailSchema = v.pipe(requiredText('邮箱', 254), v.email('邮箱格式不正确'))
 const websiteSchema = v.pipe(
@@ -74,6 +75,12 @@ export const parseCommentInput = (value: unknown) =>
   v.safeParse(commentCreateSchema, value)
 export const parsePagePath = (value: unknown) =>
   v.safeParse(pagePathSchema, value)
+/** Shared by the API, SDK and import tooling; never silently discard query/fragment data. */
+export function normalizePagePath(value: string): string {
+  const result = parsePagePath(value)
+  if (!result.success) throw new Error(result.issues[0].message)
+  return result.output
+}
 export const isValidEmail = (value: string): boolean => v.is(emailSchema, value)
 export const isValidWebsite = (value: string): boolean =>
   v.is(websiteSchema, value)

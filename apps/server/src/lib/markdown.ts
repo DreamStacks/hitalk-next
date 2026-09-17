@@ -18,6 +18,31 @@ const md = new MarkdownIt({
 // 添加 emoji 插件
 md.use(emoji)
 
+// Keep readers on the article when opening web links; in-page anchors stay local.
+md.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
+  const token = tokens[index]
+  const href = String(token.attrGet('href') || '')
+  if (href && !href.startsWith('#') && !/^mailto:/i.test(href)) {
+    token.attrSet('target', '_blank')
+    token.attrSet('rel', 'nofollow noopener noreferrer')
+  }
+  return renderer.renderToken(tokens, index, options)
+}
+
+// Markdown table alignment becomes a small allowlisted attribute, not arbitrary inline CSS.
+for (const name of ['th_open', 'td_open']) {
+  md.renderer.rules[name] = (tokens, index, options, _env, renderer) => {
+    const token = tokens[index]
+    const alignment = /^text-align:(left|center|right)$/.exec(
+      String(token.attrGet('style') || '')
+    )
+    token.attrs =
+      token.attrs?.filter(([attribute]) => attribute !== 'style') || null
+    if (alignment) token.attrSet('align', alignment[1])
+    return renderer.renderToken(tokens, index, options)
+  }
+}
+
 // 表情数据 (从 v1 迁移)
 const emojiData = {
   泡泡: `呵呵|哈哈|吐舌|太开心|笑眼|花心|小乖|乖|捂嘴笑|滑稽|你懂的|不高兴|怒|汗|黑线|泪|真棒|喷|惊哭|阴险|鄙视|酷|啊|狂汗|what|疑问|酸爽|呀咩爹|委屈|惊讶|睡觉|笑尿|挖鼻|吐|犀利|小红脸|懒得理|勉强|爱心|心碎|玫瑰|礼物|彩虹|太阳|星星月亮|钱币|茶杯|蛋糕|大拇指|胜利|haha|OK|沙发|手纸|香蕉|便便|药丸|红领巾|蜡烛|音乐|灯泡|开心|钱|咦|呼|冷|生气|弱`,
@@ -85,8 +110,15 @@ export function renderMarkdown(markdown: string): string {
       img: ['src', 'alt', 'class', 'height', 'width', 'title'],
       blockquote: [],
       ul: [],
-      ol: [],
+      ol: ['start'],
       li: [],
+      hr: [],
+      table: [],
+      thead: [],
+      tbody: [],
+      tr: [],
+      th: ['align'],
+      td: ['align'],
       h1: [],
       h2: [],
       h3: [],

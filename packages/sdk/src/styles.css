@@ -373,6 +373,48 @@
   margin: 8px 0;
 }
 
+.Hitalk .vreply-to {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: var(--ht-accent);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.Hitalk .vcard:focus {
+  outline: 2px solid var(--ht-accent);
+  outline-offset: 4px;
+}
+
+.Hitalk .vcontent table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.Hitalk .vcontent th,
+.Hitalk .vcontent td {
+  border: 1px solid var(--ht-border);
+  padding: 6px 10px;
+}
+
+.Hitalk .vcontent th {
+  font-weight: 600;
+}
+
+.Hitalk .vcontent hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--ht-border);
+}
+
+.Hitalk .vcontent ol,
+.Hitalk .vcontent ul {
+  padding-inline-start: 1.5em;
+}
+
 .Hitalk .vcontent a {
   color: var(--ht-accent);
   text-decoration: underline;

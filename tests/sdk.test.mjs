@@ -1,9 +1,9 @@
-import { test, vi } from 'vitest'
+import { onTestFinished, test, vi } from 'vitest'
 import * as HitalkSDK from '../packages/sdk/src/index.ts'
 import assert from 'node:assert/strict'
 import { tick, json, list, comment, deferred } from './helpers/comments.mjs'
 
-function fixture(t, handler, beforeMount = () => {}) {
+function fixture(t, handler, beforeMount = () => {}, options = {}) {
   document.body.replaceWith(document.createElement('body'))
   document.body.innerHTML = '<div id="comments"></div>'
   localStorage.clear()
@@ -24,6 +24,7 @@ function fixture(t, handler, beforeMount = () => {}) {
   instance = HitalkSDK.mount('#comments', {
     server: 'https://api.example.com',
     pageSize: 10,
+    ...options,
   })
   return { window, document, instance }
 }
@@ -50,6 +51,223 @@ test('untrusted nickname, website and cached input cannot create event attribute
     payload
   )
   assert.equal(f.document.querySelector('.vhead a').getAttribute('href'), '#')
+})
+
+test('standalone counters deduplicate canonical paths, batch 50 and fill only their scope', async t => {
+  document.body.innerHTML =
+    '<span class="hitalk-comment-count" data-xid="/outside">keep</span><main></main>'
+  const root = document.querySelector('main')
+  const paths = Array.from(
+    { length: 53 },
+    (_, index) => `/posts/${index}/index.html`
+  )
+  paths.push('/posts/0/', '/posts/0/index.htm')
+  for (const path of paths) {
+    const element = document.createElement('span')
+    element.className = 'hitalk-comment-count'
+    element.setAttribute('data-xid', path)
+    element.textContent = '…'
+    root.append(element)
+  }
+  t.onTestFinished(() => document.body.replaceChildren())
+  const requests = []
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
+    const query = new URL(url)
+    assert.equal(query.pathname, '/comments/count')
+    const batch = query.searchParams.getAll('paths[]')
+    requests.push(batch)
+    return json(
+      Object.fromEntries(
+        batch.map(path => [path, path === '/posts/1/' ? 0 : 7])
+      )
+    )
+  })
+  const counts = await HitalkSDK.fillCommentCounts({
+    server: 'https://api.example.com/',
+    root,
+  })
+  assert.deepEqual(
+    requests.map(batch => batch.length),
+    [50, 3]
+  )
+  assert.equal(Object.keys(counts).length, 53)
+  assert.equal(root.firstElementChild.textContent, '7')
+  assert.equal(root.children[1].textContent, '0')
+  assert.equal(root.lastElementChild.textContent, '7')
+  assert.equal(
+    document.querySelector('[data-xid="/outside"]').textContent,
+    'keep'
+  )
+  assert.equal(document.querySelector('.veditor'), null)
+  assert.deepEqual(
+    await HitalkSDK.getCommentCounts('https://api.example.com', []),
+    {}
+  )
+  await assert.rejects(
+    HitalkSDK.getCommentCounts('https://api.example.com', ['/post?draft=1']),
+    /path/
+  )
+  assert.equal(requests.length, 2)
+})
+
+test('counter failures keep existing text and pending results do not overwrite a reused article element', async t => {
+  document.body.innerHTML =
+    '<span class="hitalk-comment-count" data-xid="/a">keep</span>'
+  t.onTestFinished(() => document.body.replaceChildren())
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(json({ message: 'offline' }, 503))
+  await assert.rejects(
+    HitalkSDK.fillCommentCounts({ server: 'https://api.example.com' }),
+    /offline/
+  )
+  const element = document.querySelector('span')
+  assert.equal(element.textContent, 'keep')
+  const pending = deferred()
+  fetch.mockImplementation(() => pending.promise)
+  const result = HitalkSDK.fillCommentCounts({
+    server: 'https://api.example.com',
+  })
+  element.setAttribute('data-xid', '/b')
+  pending.resolve(json({ '/a': 5 }))
+  await result
+  assert.equal(element.textContent, 'keep')
+})
+
+test('nested replies name the actual parent and locate it without moving or clearing a draft', async t => {
+  const parent = comment({
+    id: 'parent:with/special',
+    nick: '<img src=x onerror=alert(1)>',
+    parent_id: 'root',
+  })
+  const child = comment({ id: 'child', nick: 'Child', parent_id: parent.id })
+  const f = fixture(t, async () =>
+    json(
+      list([comment({ id: 'root', nick: 'Root', children: [child, parent] })])
+    )
+  )
+  await tick()
+  const target = f.document.getElementById(parent.id)
+  const content = target.querySelector('.vcontent')
+  content.classList.add('expand')
+  const scroll = vi.fn()
+  target.scrollIntoView = scroll
+  const editor = f.document.querySelector('.veditor')
+  editor.value = 'keep my draft'
+  const link = f.document.getElementById('child').querySelector('.vreply-to')
+  assert.equal(link.textContent.trim(), `回复 @${parent.nick}`)
+  assert.equal(link.querySelector('img'), null)
+  assert.equal(link.getAttribute('href'), `#${encodeURIComponent(parent.id)}`)
+  link.click()
+  assert.equal(f.document.activeElement, target)
+  assert.equal(scroll.mock.calls.length, 1)
+  assert.ok(!content.classList.contains('expand'))
+  assert.equal(f.document.querySelector('.veditor'), editor)
+  assert.equal(editor.value, 'keep my draft')
+  assert.equal(
+    f.document
+      .getElementById('root')
+      .querySelector(':scope > section > .vreply-to'),
+    null
+  )
+  assert.equal(
+    target.querySelector('.vreply-to').textContent.trim(),
+    '回复 @Root'
+  )
+})
+
+test.each([
+  [['nick'], { nick: 'Cached' }],
+  [[], { nick: 'Guest' }],
+  [
+    ['website', 'email'],
+    {
+      nick: 'Guest',
+      website: 'https://example.com',
+      email: 'reader@example.com',
+    },
+  ],
+])(
+  'guestFields %j controls both displayed and submitted fields, including cached data',
+  async (fields, expected) => {
+    let submitted
+    const f = fixture(
+      { onTestFinished },
+      async (_url, init) => {
+        if (init.method === 'POST') {
+          submitted = JSON.parse(init.body)
+          return json(comment(), 201)
+        }
+        return json(list([]))
+      },
+      window =>
+        window.localStorage.setItem(
+          'HitalkCache',
+          JSON.stringify({
+            nick: 'Cached',
+            email: 'reader@example.com',
+            website: 'https://example.com',
+          })
+        ),
+      { guestFields: fields }
+    )
+    await tick()
+    assert.deepEqual(
+      Array.from(
+        f.document.querySelectorAll('.vheader input'),
+        input => input.name
+      ),
+      fields
+    )
+    if (!fields.includes('nick'))
+      assert.equal(f.document.querySelector('.welcome'), null)
+    f.document.querySelector('.veditor').value = 'hello'
+    f.document.querySelector('.smiles-logo').click()
+    f.document.querySelector('.vsubmit').click()
+    await tick()
+    assert.equal(submitted.nick, expected.nick)
+    assert.equal(submitted.email, expected.email)
+    assert.equal(submitted.website, expected.website)
+  }
+)
+
+test('explicit SDK paths are normalized for reads and writes, with invalid paths rejected before replacing an instance', async t => {
+  const requests = []
+  const f = fixture(
+    t,
+    async (url, init) => {
+      requests.push({ url, body: init.body && JSON.parse(init.body) })
+      return init.method === 'POST' ? json(comment(), 201) : json(list([]))
+    },
+    () => {},
+    { path: '/posts/index.html' }
+  )
+  await tick()
+  assert.equal(new URL(requests[0].url).searchParams.get('path'), '/posts/')
+  f.document.querySelector('.veditor').value = 'hello'
+  f.document.querySelector('.vsubmit').click()
+  await tick()
+  assert.equal(requests.find(request => request.body).body.path, '/posts/')
+  const editor = f.document.querySelector('.veditor')
+  assert.throws(
+    () =>
+      HitalkSDK.mount('#comments', {
+        server: 'https://api.example.com',
+        path: '/posts/#more',
+      }),
+    /path/
+  )
+  assert.equal(f.document.querySelector('.veditor'), editor)
+  assert.equal(HitalkSDK.normalizePagePath('/index.htm'), '/')
+  assert.equal(
+    HitalkSDK.normalizePagePath('/posts/myindex.html'),
+    '/posts/myindex.html'
+  )
+  assert.equal(
+    HitalkSDK.normalizePagePath('/index.html/chapter'),
+    '/index.html/chapter'
+  )
+  assert.throws(() => HitalkSDK.normalizePagePath('//example.com'), /path/)
 })
 
 test('reply, like and refresh preserve the editor node, draft and updated likes', async t => {

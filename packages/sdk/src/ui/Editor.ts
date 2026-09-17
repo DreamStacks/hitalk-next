@@ -1,6 +1,6 @@
 import { html, nothing, render } from 'lit-html'
 import { createRef, ref } from 'lit-html/directives/ref.js'
-import type { UserInfo } from '@hitalk/shared'
+import type { GuestField, UserInfo } from '@hitalk/shared'
 import { renderEmojiPicker } from '../renderer/emoji'
 
 export interface EditorData extends UserInfo {
@@ -22,9 +22,10 @@ export class Editor {
     private userInfo: UserInfo | null,
     private placeholder: string,
     private onSubmit: (data: EditorData) => void,
-    private onCancel: () => void
+    private onCancel: () => void,
+    private guestFields: readonly GuestField[]
   ) {
-    this.editingInfo = !userInfo
+    this.editingInfo = !userInfo || !guestFields.includes('nick')
     this.render()
     container.ownerDocument.body.addEventListener(
       'mouseup',
@@ -44,7 +45,8 @@ export class Editor {
   private submit = () => {
     if (this.submitting) return
     const value = (selector: string) =>
-      this.container.querySelector<HTMLInputElement>(selector)!.value.trim()
+      this.container.querySelector<HTMLInputElement>(selector)?.value.trim() ||
+      ''
     this.onSubmit({
       nick: value('.vnick'),
       email: value('.vmail'),
@@ -71,7 +73,7 @@ export class Editor {
       html`
         <div class="vwrap">
           ${
-            this.userInfo
+            this.userInfo && this.guestFields.includes('nick')
               ? html`<div class="welcome">
                   欢迎回来,${this.userInfo.nick}!<span
                     class="info-edit"
@@ -84,32 +86,33 @@ export class Editor {
                 </div>`
               : nothing
           }
-          <div class="vheader${this.editingInfo ? '' : ' hide'}">
-            <input
-              name="nick"
-              placeholder="称呼"
-              class="vnick vinput"
-              type="text"
-              .value=${this.userInfo?.nick || ''}
-              ?disabled=${this.submitting}
-            />
-            <input
-              name="email"
-              placeholder="邮箱"
-              class="vmail vinput"
-              type="email"
-              .value=${this.userInfo?.email || ''}
-              ?disabled=${this.submitting}
-            />
-            <input
-              name="website"
-              placeholder="网址"
-              class="vlink vinput"
-              type="text"
-              .value=${this.userInfo?.website || ''}
-              ?disabled=${this.submitting}
-            />
-          </div>
+          ${
+            this.guestFields.length
+              ? html` <div class="vheader${this.editingInfo ? '' : ' hide'}">
+                  ${this.guestFields.map(field => {
+                    const labels = {
+                      nick: '称呼',
+                      email: '邮箱',
+                      website: '网址',
+                    }
+                    const classes = {
+                      nick: 'vnick',
+                      email: 'vmail',
+                      website: 'vlink',
+                    }
+                    return html`<input
+                      name=${field}
+                      placeholder=${labels[field]}
+                      aria-label=${labels[field]}
+                      class=${`${classes[field]} vinput`}
+                      type=${field === 'email' ? 'email' : 'text'}
+                      .value=${this.userInfo?.[field] || ''}
+                      ?disabled=${this.submitting}
+                    />`
+                  })}
+                </div>`
+              : nothing
+          }
           <!-- Native input values remain user-owned between renders; only clear() resets the draft. -->
           <div class="vedit">
             <textarea

@@ -47,13 +47,18 @@ pnpm db:seed
     title: document.title,
     pageSize: 10,
     avatar: 'mm',
+    guestFields: ['nick', 'email', 'website'],
   })
   // SPA 页面卸载前调用 comments.destroy()
   // 重新读取第一页调用 await comments.refresh()
 </script>
 ```
 
-`pageSize` 为每页根评论数（1–50），每个根评论携带全部回复。SDK 提供“加载更多”。`path` 应是以 `/` 开头的页面路径，不包含查询参数、片段或空白；同一个 Worker 对应一个站点。
+`pageSize` 为每页根评论数（1–50），每个根评论携带全部回复。SDK 提供“加载更多”。回复显示“回复 @昵称”，点击可定位并展开实际被回复的评论；多层回复仍平铺为第二层，定位不会清空草稿。
+
+`guestFields` 默认显示昵称、邮箱、网址，可按数组顺序选择，例如 `['nick', 'email']` 隐藏网址，`[]` 隐藏全部访客字段。隐藏字段不会从缓存提交；隐藏昵称时使用 `Guest`。这是界面配置，服务端仍按统一规则校验请求。
+
+`path` 应是以 `/` 开头的页面路径，不包含查询参数、片段或空白；同一个 Worker 对应一个站点。SDK 的显式/默认路径、服务端读取/提交/计数都将末尾 `/index.html`、`/index.htm` 归一化为 `/`，例如 `/posts/index.html` 与 `/posts/` 共用评论。`/posts` 与 `/posts/` 仍是不同路径，大小写和编码不自动改写。
 
 SDK 同时产出 ESM、可直接通过 script 加载的 IIFE 和独立类型声明。npm 消费方式：
 
@@ -67,6 +72,45 @@ SDK 使用 lit-html 管理模板与局部 DOM 更新，渲染器已包含在 ESM
 ESM 可在没有 DOM 的服务端环境导入，但 mount 只能在浏览器执行；SDK 不提供服务端评论渲染或 hydration。SPA 切换文章路径时销毁并重新挂载，refresh 只刷新当前路径。
 
 构建产物可打包，但本仓库的构建和检查命令不会发布 npm 包。
+
+### 文章列表评论数
+
+无需挂载评论编辑器。给文章计数元素设置路径，在列表渲染完成后调用（需先加载 SDK 脚本）：
+
+```html
+<span class="hitalk-comment-count" data-xid="/posts/hello/index.html">—</span>
+<script>
+  Hitalk.fillCommentCounts({ server: 'https://your-worker.workers.dev' }).catch(
+    console.error
+  )
+</script>
+```
+
+`fillCommentCounts` 自动扫描并填充计数，默认扫描 document，也可传入 `root` 限定列表容器。自动合并重复路径，每批最多查询 50 个路径；全部请求成功后更新文本，失败时保留原文并拒绝 Promise。SPA 列表切换后重新调用，未查询到评论的页面显示 `0`。若只需要数据：
+
+```ts
+import {
+  getCommentCounts,
+  fillCommentCounts,
+  normalizePagePath,
+} from '@hitalk/sdk'
+
+const counts = await getCommentCounts('https://your-worker.workers.dev', [
+  '/posts/hello/index.html',
+])
+console.log(counts['/posts/hello/']) // 返回值使用归一化后的路径作为键
+await fillCommentCounts({
+  server: 'https://your-worker.workers.dev',
+  root: document.querySelector('#articles')!,
+})
+normalizePagePath('/posts/hello/index.htm') // /posts/hello/
+```
+
+`normalizePagePath` 也可供未来导入工具使用。含查询参数或片段的路径会抛错，导入前应显式确认其归属；本次规则不会自动合并数据库里已经存在的页面。
+
+### 评论正文
+
+支持 Markdown 表格（含列对齐）、分隔线、有序列表起始序号、代码、引用、图片及表情。表格在窄屏内横向滚动。正文网页链接（包括相对路径）在新标签页打开并带 `nofollow noopener noreferrer`；`#片段` 保留页内跳转，邮件链接保留原行为。所有正文仍经过服务端清洗，不支持直接输入 HTML。
 
 ## API 契约
 

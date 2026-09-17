@@ -7,6 +7,7 @@ import { getGravatarUrl, timeAgo, getLink } from '../utils'
 export interface CommentActions {
   onReply: (id: string, nick: string) => void
   onLike: (id: string) => void
+  onLocate: (id: string) => void
 }
 
 function expandContent(event: Event) {
@@ -18,10 +19,14 @@ export function renderComment(
   comment: Comment,
   avatarType: string,
   actions: CommentActions,
+  commentsById: ReadonlyMap<string, Comment>,
   isChild = false
 ): TemplateResult {
+  const parent = comment.parent_id
+    ? commentsById.get(comment.parent_id)
+    : undefined
   return html`
-    <li class="vcard" id=${comment.id}>
+    <li class="vcard" id=${comment.id} tabindex="-1">
       ${avatarType === 'hide' ? nothing : html`<img class="vimg" src=${getGravatarUrl(comment.avatar_hash, avatarType)} alt=${comment.nick} />`}
       <section>
         <div class="vhead">
@@ -41,6 +46,19 @@ export function renderComment(
               : nothing
           }
         </div>
+        ${
+          parent
+            ? html`<a
+                class="vreply-to"
+                href=${`#${encodeURIComponent(parent.id)}`}
+                @click=${(event: MouseEvent) => {
+                  event.preventDefault()
+                  actions.onLocate(parent.id)
+                }}
+                >回复 @${parent.nick}</a
+              >`
+            : nothing
+        }
         <!-- Only the trusted Hitalk server's sanitized Markdown may enter this HTML boundary. -->
         <div class="vcontent" @click=${expandContent}>
           ${unsafeHTML(comment.content_html)}
@@ -70,7 +88,14 @@ export function renderComment(
                     ${repeat(
                       comment.children,
                       child => child.id,
-                      child => renderComment(child, avatarType, actions, true)
+                      child =>
+                        renderComment(
+                          child,
+                          avatarType,
+                          actions,
+                          commentsById,
+                          true
+                        )
                     )}
                   </ul>
                 </div>
@@ -89,12 +114,20 @@ export function renderCommentList(
   avatarType: string,
   actions: CommentActions
 ): TemplateResult {
+  const commentsById = new Map<string, Comment>()
+  const collect = (items: Comment[]) => {
+    for (const comment of items) {
+      commentsById.set(comment.id, comment)
+      if (comment.children) collect(comment.children)
+    }
+  }
+  collect(comments)
   return comments.length
     ? html`<ul class="vlist">
         ${repeat(
           comments,
           comment => comment.id,
-          comment => renderComment(comment, avatarType, actions)
+          comment => renderComment(comment, avatarType, actions, commentsById)
         )}
       </ul>`
     : html`<div class="vempty">还没有评论哦，快来抢沙发吧!</div>`

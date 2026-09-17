@@ -96,9 +96,12 @@ test('published declarations typecheck without workspace or dependency access', 
   )
   writeFileSync(
     join(directory, 'consumer.ts'),
-    `import { mount, type CommentCreateRequest } from './hitalk';
+    `import { mount, getCommentCounts, fillCommentCounts, normalizePagePath, type GuestField, type CommentCreateRequest } from './hitalk';
 const request: CommentCreateRequest = { path: '/article', nick: 'Reader', content: '**hello**' };
-const instance = mount('#comments', { server: 'https://example.com', path: request.path });
+const guestFields: GuestField[] = ['nick', 'email'];
+const instance = mount('#comments', { server: 'https://example.com', path: normalizePagePath(request.path), guestFields });
+void getCommentCounts('https://example.com', ['/article']);
+void fillCommentCounts({server: 'https://example.com', root: document});
 void instance.refresh(); instance.destroy();`
   )
   writeFileSync(
