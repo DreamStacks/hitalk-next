@@ -10,20 +10,19 @@
 
 ```sh
 pnpm install --frozen-lockfile
-cp apps/server/.dev.vars.example apps/server/.dev.vars
-# 修改 .dev.vars 中的 ADMIN_TOKEN 和 IP_HASH_SALT
-pnpm --filter @hitalk/server db:init
-pnpm --filter @hitalk/server dev
+pnpm dev
 ```
 
-另开终端：
+`pnpm dev` 自动创建缺失的 `apps/server/.dev.vars`（随机本地管理员令牌与 IP 盐，默认关闭邮件），保留已有配置，并应用本地 D1 迁移，然后同时启动：
 
-```sh
-pnpm build
-python3 -m http.server 8080
-```
+- 开发示例：[http://127.0.0.1:5173](http://127.0.0.1:5173)，入口为 `examples/playground/index.html`。
+- Worker API：[http://127.0.0.1:8787](http://127.0.0.1:8787)。管理页为 `/admin`，令牌从本地 `.dev.vars` 的 `ADMIN_TOKEN` 读取。
 
-访问 `http://localhost:8080/test.html`。管理页为 `http://localhost:8787/admin`，在页面内输入管理员令牌。
+前端直接加载 SDK 源码，无需先构建：CSS 保存后即时更新；TS 保存后自动销毁并重新挂载评论组件，保留未提交的昵称、邮箱、网址和正文。重新挂载会重置回复目标和分页；HTML 修改触发整页刷新。后端由 Wrangler 自动重载，请求经前端 `/api` 代理到本地 Worker；后端修改后重新触发请求即可看到结果。
+
+按 Ctrl+C 一起停止服务；任一服务退出会结束另一服务。前端端口固定为 5173，避免端口被占用时悄悄切换。开发数据保留在本地 D1，下次启动不会清空。
+
+也可分开运行 `pnpm dev:server`、`pnpm dev:web`；首次单独启动前执行 `pnpm dev:setup`。SDK 发布产物仍使用 `pnpm build`，若需持续构建产物则执行 `pnpm --filter @hitalk/sdk dev`。自动化测试监听使用 `pnpm test:watch`。
 
 ## 嵌入 SDK
 
@@ -108,8 +107,9 @@ apps/server/src/plugins/   可选邮件通知
 apps/server/migrations/    版本化数据库结构、约束和计数触发器
 packages/shared/          公开 API 类型与 Valibot 输入校验
 packages/sdk/src/         请求、状态、渲染与组件生命周期
+examples/playground/      Vite 开发示例、热更新入口
 tests/                    Vitest：SDK、发布产物、后端、备份和真实 CLI 集成
-scripts/                  运维用备份恢复校验 CLI
+scripts/                  本地开发初始化与备份恢复校验 CLI
 ```
 
 技术栈版本与取舍见 [依赖决策](docs/dependencies.md)，架构与剩余限制见 [维护说明](docs/architecture.md)。邮件为尽力发送，尚无持久队列、自动重试或投递状态；匿名提交尚无限流、验证码与审核，开放到公网前应配置入口防滥用。分页限制根评论数，不限制单个讨论串的回复数量。Markdown 是唯一持久化的评论内容。

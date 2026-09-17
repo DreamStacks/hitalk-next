@@ -6,21 +6,21 @@
 
 ## 本轮采用
 
-| 层次            | 选择                                                      | 原因                                                             |
-| --------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
-| 类型检查        | TypeScript 7.0.2                                          | 使用原生编译器，移除 baseUrl；构建和消费方声明均实际编译验证     |
-| SDK 构建        | tsdown 0.23.0 / Rolldown / Oxc                            | 替换 Rollup 及多项插件；统一产出 ESM、IIFE、独立类型声明         |
-| DOM 渲染        | lit-html 3.3.3                                            | 模板绑定、按 ID 复用节点、声明式事件；不绑定宿主框架             |
-| CSS             | @tsdown/css 0.23.0 + Lightning CSS 1.33.0                 | 集成提取和压缩，替换 PostCSS 构建插件链                          |
-| 代码检查        | Oxlint 1.83.0 + oxlint-tsgolint 7.0.2001                  | 开启类型感知规则，包括未处理 Promise；实际探针验证规则能阻止错误 |
-| 格式化          | Oxfmt 0.68.0                                              | 统一格式，加入 check/CI                                          |
-| 测试            | Vitest 4.1.11 + @cloudflare/vitest-plugin 1.1.11          | 统一运行 Node/jsdom 与真实 workerd/D1 测试                       |
-| 测试转换        | Vite 8.3.0                                                | 配套 Vitest，按需转换 TypeScript；不增加生产运行时               |
-| 覆盖率          | @vitest/coverage-istanbul 4.1.11                          | Node 与 Workers 共用报告，设置可执行覆盖率门槛                   |
-| 输入契约        | Valibot 1.5.0                                             | 模块化 schema；前后端共用邮箱/网址校验，后端验证完整请求         |
-| HTTP 与平台工具 | Hono 4.13.8、Wrangler 4.133.0、Workers types 5.20260917.1 | 升级当前版本，并验证 Worker 打包及本地 D1 行为                   |
-| Markdown        | markdown-it 15.0.2、markdown-it-emoji 3.1.0               | 保留适合 Workers 的纯 JS 引擎，升级并补危险协议/HTML 用例        |
-| Git 提交检查    | lint-staged 17.5.1、Husky 9.1.7                           | 沿用现有流程，升级工具                                           |
+| 层次            | 选择                                                      | 原因                                                                |
+| --------------- | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| 类型检查        | TypeScript 7.0.2                                          | 使用原生编译器，移除 baseUrl；构建和消费方声明均实际编译验证        |
+| SDK 构建        | tsdown 0.23.0 / Rolldown / Oxc                            | 替换 Rollup 及多项插件；统一产出 ESM、IIFE、独立类型声明            |
+| DOM 渲染        | lit-html 3.3.3                                            | 模板绑定、按 ID 复用节点、声明式事件；不绑定宿主框架                |
+| CSS             | @tsdown/css 0.23.0 + Lightning CSS 1.33.0                 | 集成提取和压缩，替换 PostCSS 构建插件链                             |
+| 代码检查        | Oxlint 1.83.0 + oxlint-tsgolint 7.0.2001                  | 开启类型感知规则，包括未处理 Promise；实际探针验证规则能阻止错误    |
+| 格式化          | Oxfmt 0.68.0                                              | 统一格式，加入 check/CI                                             |
+| 测试            | Vitest 4.1.11 + @cloudflare/vitest-plugin 1.1.11          | 统一运行 Node/jsdom 与真实 workerd/D1 测试                          |
+| 测试转换        | Vite 8.3.0                                                | 配套 Vitest 与开发示例热更新，按需转换 TypeScript；不增加生产运行时 |
+| 覆盖率          | @vitest/coverage-istanbul 4.1.11                          | Node 与 Workers 共用报告，设置可执行覆盖率门槛                      |
+| 输入契约        | Valibot 1.5.0                                             | 模块化 schema；前后端共用邮箱/网址校验，后端验证完整请求            |
+| HTTP 与平台工具 | Hono 4.13.8、Wrangler 4.133.0、Workers types 5.20260917.1 | 升级当前版本，并验证 Worker 打包及本地 D1 行为                      |
+| Markdown        | markdown-it 15.0.2、markdown-it-emoji 3.1.0               | 保留适合 Workers 的纯 JS 引擎，升级并补危险协议/HTML 用例           |
+| Git 提交检查    | lint-staged 17.5.1、Husky 9.1.7                           | 沿用现有流程，升级工具                                              |
 
 [tsdown 声明生成](https://tsdown.dev/options/dts)、[CSS 集成](https://tsdown.dev/options/css)、[Oxc 类型感知检查](https://oxc.rs/docs/guide/usage/linter/type-aware.html)、[Valibot 设计](https://valibot.dev/guides/introduction/)。
 
@@ -31,6 +31,10 @@ tsdown 的 TypeScript 7 声明生成适配仍会输出 experimental API 提示�
 markdown-it 15 已自带类型，但 markdown-it-emoji 的社区类型仍引用 14。已移除这两项旧 @types，并仅为实际使用的 full(md) 插件入口声明 15 版本类型；插件行为通过真实 Workers 测试验证。未来插件自带类型后删除这份小声明。
 
 移除 nanoid，使用 Workers 原生 crypto.randomUUID()。移除 tsx 直接依赖、Rollup 及其 resolve/commonjs/typescript/dts/postcss 插件和 tslib。Vitest 的可选工具依赖可能仍在锁文件中出现，不等于项目继续依赖旧构建流程。SDK 不再输出 CommonJS/UMD。
+
+## 开发环境
+
+Vite 直接运行 examples/playground 中的 SDK 源码示例，CSS 原生热更新；TS 通过 [HMR dispose/data](https://vite.dev/guide/api-hmr) 清理旧实例并在内存中保留输入草稿。开发适配不进入 SDK 发布产物。统一 pnpm dev 先初始化缺失配置并应用本地迁移，再由 [concurrently](https://github.com/open-cli-tools/concurrently) 管理 Vite/Wrangler 进程，任一退出时结束其余进程。
 
 ## DOM 渲染与测试组织
 

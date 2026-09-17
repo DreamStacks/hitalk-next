@@ -1,0 +1,483 @@
+:root {
+  color-scheme: light;
+  --page-bg: #f5f8f5;
+  --page-surface: #ffffff;
+  --page-ink: #263d33;
+  --page-muted: #62746a;
+  --page-accent: #367353;
+  --page-tint: #e8f0e9;
+  --page-border: #dfe7e1;
+  --page-input: #f8faf8;
+  --page-font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page-bg: #17231e;
+  --page-surface: #1e2c25;
+  --page-ink: #e2ede5;
+  --page-muted: #a7baad;
+  --page-accent: #a0d2b0;
+  --page-tint: #2c4034;
+  --page-border: #3b4f42;
+  --page-input: #23332a;
+}
+
+.playground {
+  margin: 0;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--page-font);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--page-ink);
+  background: var(--page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.playground *,
+.playground *::before,
+.playground *::after {
+  box-sizing: border-box;
+}
+.playground a {
+  color: inherit;
+  text-decoration: none;
+}
+.playground button {
+  font: inherit;
+}
+.playground a,
+.playground button {
+  -webkit-tap-highlight-color: transparent;
+}
+.playground :focus-visible {
+  outline: 2px solid var(--page-accent);
+  outline-offset: 4px;
+}
+.playground ::selection {
+  background: var(--page-tint);
+  color: var(--page-ink);
+}
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  padding: 8px 16px;
+  background: var(--page-surface);
+  transform: translateY(-160%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+.site-header,
+.site-footer {
+  width: min(100% - 80px, 1040px);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.site-header {
+  min-height: 100px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+.brand-mark {
+  width: 29px;
+  height: 29px;
+  color: var(--page-accent);
+}
+.brand-dot {
+  color: var(--page-accent);
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: var(--page-muted);
+}
+.source-link {
+  font-size: 13px;
+}
+.source-link span {
+  margin-left: 4px;
+}
+.source-link:hover,
+.site-footer a:hover {
+  color: var(--page-accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.nav-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--page-border);
+}
+.theme-toggle {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--page-muted);
+  cursor: pointer;
+  transition:
+    background 180ms ease-out,
+    color 180ms ease-out;
+}
+.theme-toggle:hover {
+  background: var(--page-tint);
+  color: var(--page-accent);
+}
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.theme-toggle .sun-icon,
+[data-theme='dark'] .theme-toggle .moon-icon {
+  display: none;
+}
+[data-theme='dark'] .theme-toggle .sun-icon {
+  display: block;
+}
+.page-main {
+  width: min(100% - 48px, 728px);
+  margin: 0 auto;
+  flex: 1;
+}
+.introduction {
+  padding: 48px 0 38px;
+}
+.page-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--page-accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+.page-label > span {
+  font-size: 19px;
+  line-height: 1;
+}
+.introduction h1 {
+  margin: 18px 0 12px;
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+.title-dot {
+  color: var(--page-accent);
+}
+.introduction p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--page-muted);
+  text-wrap: pretty;
+}
+.mobile-break {
+  display: none;
+}
+.conversation {
+  background: var(--page-surface);
+  border: 1px solid var(--page-border);
+  border-radius: 14px;
+}
+.conversation-heading {
+  padding: 26px 28px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.conversation-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.format-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--page-muted);
+  font-size: 12px;
+}
+.format-hint svg {
+  width: 20px;
+  height: 20px;
+}
+.conversation-note {
+  margin: 0;
+  padding: 15px 28px;
+  border-top: 1px solid var(--page-border);
+  color: var(--page-muted);
+  font-size: 12px;
+}
+.conversation-note span {
+  margin-left: 8px;
+}
+.example-note {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  margin: 18px 4px 44px;
+  color: var(--page-muted);
+  font-size: 12px;
+}
+.example-note p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.example-dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--page-muted);
+}
+.site-footer {
+  min-height: 90px;
+  border-top: 1px solid var(--page-border);
+  gap: 16px;
+  color: var(--page-muted);
+  font-size: 12px;
+}
+
+/* Host-page styling stays separate from the SDK's published defaults. */
+.playground .Hitalk {
+  --ht-bg: var(--page-surface);
+  --ht-text: var(--page-ink);
+  --ht-header: var(--page-ink);
+  --ht-muted: var(--page-muted);
+  --ht-accent: var(--page-accent);
+  --ht-border: var(--page-border);
+  --ht-border-dashed: var(--page-border);
+  --ht-card-border: var(--page-border);
+  --ht-input-bg: transparent;
+  --ht-btn-bg: var(--page-tint);
+  --ht-btn-text: var(--page-accent);
+  --ht-code-bg: var(--page-input);
+  --ht-code-text: var(--page-ink);
+  --ht-smiles-bg: var(--page-surface);
+  --ht-smiles-bar: var(--page-input);
+  padding: 0 28px 12px;
+  font-family: var(--page-font);
+}
+.playground .Hitalk .vwrap {
+  border: 0;
+  border-radius: 0;
+  padding: 20px 0 22px;
+  margin: 0;
+}
+.playground .Hitalk .vheader {
+  gap: 18px;
+}
+.playground .Hitalk .vheader .vinput {
+  min-width: 0;
+  width: 0;
+  border-bottom: 1px solid var(--page-border);
+  padding: 10px 2px;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 13px;
+}
+.playground .Hitalk .vinput::placeholder {
+  color: var(--page-muted);
+  opacity: 1;
+}
+.playground .Hitalk .vheader .vinput:focus {
+  border-color: var(--page-accent);
+}
+.playground .Hitalk .veditor {
+  margin: 20px 0 0;
+  min-height: 150px;
+  padding: 15px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--page-input);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.8;
+  resize: vertical;
+  transition: border-color 180ms ease-out;
+}
+.playground .Hitalk .veditor:focus {
+  border-color: var(--page-accent);
+}
+.playground .Hitalk .vinput:focus-visible {
+  outline: 2px solid var(--page-accent);
+  outline-offset: 3px;
+}
+.playground .Hitalk .vcontrol {
+  margin-top: 14px;
+}
+.playground .Hitalk .vbtn {
+  padding: 8px 20px;
+  min-height: 38px;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 13px;
+  transition:
+    background 180ms ease-out,
+    border-color 180ms ease-out;
+}
+.playground .Hitalk .vsubmit {
+  background: var(--page-accent);
+  border-color: var(--page-accent);
+  color: var(--page-surface);
+  min-width: 88px;
+}
+.playground .Hitalk .vsubmit:hover {
+  background: var(--page-ink);
+  border-color: var(--page-ink);
+  color: var(--page-surface);
+}
+.playground .Hitalk .vbtn:focus-visible {
+  outline: 2px solid var(--page-accent);
+  outline-offset: 3px;
+}
+.playground .Hitalk .smiles-logo {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 6px;
+}
+.playground .Hitalk .smiles-logo:hover {
+  background: var(--page-input);
+}
+.playground .Hitalk .smiles-body {
+  width: min(380px, calc(100vw - 108px));
+  border-radius: 10px;
+  box-shadow: none;
+}
+.playground .Hitalk .info {
+  border-top: 1px solid var(--page-border);
+  padding-top: 19px;
+  margin-top: 0;
+}
+.playground .Hitalk .info .count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--page-muted);
+}
+.playground .Hitalk .hitalk-status {
+  color: var(--page-muted);
+  font-size: 13px;
+}
+.playground .Hitalk .vempty {
+  padding: 31px 8px 40px;
+  font-size: 13px;
+}
+.playground .Hitalk .vimg:hover {
+  transform: none;
+}
+.playground .Hitalk .vcontent {
+  font-size: 14px;
+  line-height: 1.85;
+}
+.playground .Hitalk .vchildren {
+  border-top-style: solid;
+}
+.playground .Hitalk .welcome {
+  border-bottom-style: solid;
+}
+.playground .Hitalk .hitalk-more {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+  .site-header,
+  .site-footer {
+    width: calc(100% - 40px);
+  }
+  .site-header {
+    min-height: 80px;
+  }
+  .header-actions {
+    gap: 12px;
+  }
+  .page-main {
+    width: calc(100% - 32px);
+  }
+  .introduction {
+    padding: 30px 8px 30px;
+  }
+  .introduction h1 {
+    font-size: 30px;
+  }
+  .introduction p {
+    font-size: 14px;
+  }
+  .conversation-heading {
+    padding: 22px 18px 0;
+  }
+  .format-hint {
+    font-size: 11px;
+    gap: 5px;
+  }
+  .playground .Hitalk {
+    padding: 0 18px 8px;
+  }
+  .playground .Hitalk .vheader {
+    gap: 6px 12px;
+  }
+  .playground .Hitalk .vheader .vinput {
+    flex-basis: calc(50% - 12px);
+  }
+  .playground .Hitalk .vheader .vlink {
+    flex-basis: 100%;
+  }
+  .playground .Hitalk .veditor {
+    min-height: 145px;
+  }
+  .playground .Hitalk .smiles-body {
+    width: min(380px, calc(100vw - 76px));
+  }
+  .conversation-note {
+    padding: 14px 18px;
+  }
+  .conversation-note span {
+    display: none;
+  }
+  .example-note {
+    margin: 16px 8px 36px;
+  }
+  .site-footer {
+    min-height: 80px;
+    font-size: 11px;
+  }
+}
+@media (max-width: 360px) {
+  .mobile-break {
+    display: block;
+  }
+  .introduction h1 {
+    font-size: 27px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .playground *,
+  .playground *::before,
+  .playground *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

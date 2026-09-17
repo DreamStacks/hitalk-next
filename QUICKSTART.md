@@ -4,28 +4,20 @@
 
 ```sh
 pnpm install --frozen-lockfile
-cp apps/server/.dev.vars.example apps/server/.dev.vars
+pnpm dev
 ```
 
-修改 `.dev.vars` 中的 `ADMIN_TOKEN` 和 `IP_HASH_SALT` 为两个不同的随机值。邮件配置可以留空。
+首次启动自动生成 `apps/server/.dev.vars` 中的随机本地令牌与 IP 盐，已有配置保留；应用本地 D1 迁移后同时启动 Vite 和 Wrangler。新配置默认不启用邮件。
 
-```sh
-pnpm --filter @hitalk/server db:init
-pnpm --filter @hitalk/server dev
-```
+- 示例页面：[http://127.0.0.1:5173](http://127.0.0.1:5173)，源码在 `examples/playground/`
+- 管理页面：[http://127.0.0.1:8787/admin](http://127.0.0.1:8787/admin)，使用 `.dev.vars` 中的 `ADMIN_TOKEN` 登录
+- API 健康检查：[http://127.0.0.1:8787](http://127.0.0.1:8787)
 
-另一个终端：
+保存 CSS 即时更新；修改 SDK TypeScript 后自动重新挂载并保留未提交的输入，回复目标和分页会重置。修改示例 HTML 会整页刷新。后端代码修改由 Wrangler 自动重载。Ctrl+C 同时停止两个服务。
 
-```sh
-pnpm build
-python3 -m http.server 8080
-```
+开发时可另开终端运行 `pnpm test:watch`。仅启动前端/后端可使用 `pnpm dev:web` / `pnpm dev:server`，首次单独启动前执行 `pnpm dev:setup`。
 
-- 示例页面：`http://localhost:8080/test.html`
-- 管理页面：`http://localhost:8787/admin`，输入令牌登录
-- API 健康检查：`http://localhost:8787/`
-
-浏览器入口是 `Hitalk.mount()`。CSS 需要单独引入。SPA 卸载时调用返回实例的 `destroy()`。
+发布产物使用 `pnpm build` 构建，浏览器入口是 `Hitalk.mount()`，CSS 需要单独引入。SPA 卸载时调用返回实例的 `destroy()`。
 
 验证当前代码：
 
