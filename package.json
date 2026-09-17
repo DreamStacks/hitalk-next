@@ -19,6 +19,8 @@
     "prepare": "husky",
     "typecheck": "pnpm --filter @hitalk/server typecheck && pnpm --filter @hitalk/sdk typecheck && tsc -p tsconfig.dev.json",
     "build": "pnpm --filter @hitalk/sdk build",
+    "build:web": "vite build",
+    "preview:web": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "test": "pnpm build && vitest run",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:coverage",
     "db:verify-backup": "node scripts/verify-backup.mjs",

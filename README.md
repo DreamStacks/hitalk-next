@@ -146,6 +146,17 @@ Vitest 统一运行测试：后端在 workerd + 本地 D1 中执行，前端在 
 
 ## 部署与维护
 
+开发示例可单独构建为静态前端，由 GitHub Pages 托管，后端继续运行在 Cloudflare Workers + D1：
+
+```sh
+pnpm build:web    # 输出 dist/web
+pnpm preview:web # 本地预览生产构建 http://127.0.0.1:4173
+```
+
+开发模式默认通过 `/api` 访问本地 Worker；生产构建默认直连 `https://hitalk-next-api.ihoey.com`。构建时可用 `VITE_API_URL` 覆盖公开的 API 地址，不要将管理令牌或其他密钥放入 `VITE_` 环境变量。资源使用相对路径，同时适用于 GitHub 项目子路径与独立域名；评论页面标识保持 `/playground`。
+
+仓库包含手动触发的 `Deploy frontend to GitHub Pages` 工作流，检查通过后仅上传 `dist/web`。启用 Pages 的 GitHub Actions 发布源后，从 Actions 选择 `main` 运行该工作流。当前仓库为私有仓库，组织使用 Free 计划，需先解决 Pages 套餐/仓库可见性限制；完整步骤见 [运维说明](docs/operations.md#github-pages-前端)。
+
 首次部署和备份恢复请阅读 [运维说明](docs/operations.md)。项目尚未上线，不提供旧 API、旧 SDK 或历史数据兼容。
 
 配置说明见 [后端 README](apps/server/README.md)。本地迁移默认使用 `--local`，生产变更使用明确带 `:remote` 的命令。

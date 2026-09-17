@@ -1,6 +1,19 @@
 # 首次部署与备份恢复
 
-项目尚未上线，当前结构按新系统设计，不提供旧代码或历史数据兼容。下面的生产命令需要在确认目标数据库后手动执行；本轮检查只使用隔离的本地数据库。
+当前结构按新系统设计，不提供旧代码或历史数据兼容。生产命令需要在确认目标数据库后执行；自动化集成测试只使用隔离的本地数据库。
+
+## GitHub Pages 前端
+
+前端构建入口是 `examples/playground`，输出目录为 `dist/web`，不会包含后端配置、本地数据库或 `.dev.vars`。GitHub Pages 只托管静态页面，评论数据始终由 Cloudflare API 提供。
+
+1. 检查仓库是否支持 Pages。GitHub Free 组织只支持公开仓库；私有仓库需要 Team/Enterprise 等适用计划。不要为了启用 Pages 自动公开源码，须由仓库所有者决定。参见 [GitHub Pages 可用范围](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)。
+2. 在仓库 Settings → Pages 中将 Source 设置为 GitHub Actions。
+3. 在 Actions 中选择 `Deploy frontend to GitHub Pages`，选择 `main`，点击 Run workflow。工作流执行完整检查、构建和部署；普通 push 只做 CI 检查，不自动发布。
+4. 默认项目地址为 `https://dreamstacks.github.io/hitalk-next/`，实际地址以成功部署的输出为准。前端使用相对资源路径，之后绑定自定义域名不需要修改资源前缀。
+
+本地先运行 `pnpm build:web` 和 `pnpm preview:web` 预览生产构建。默认 API 是 `https://hitalk-next-api.ihoey.com`，可在构建时设置 `VITE_API_URL`；Pages 工作流也显式设置了这一公开地址。`VITE_` 变量会写入浏览器产物，只允许公开配置。
+
+API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `routes`，避免覆盖已有绑定。Worker 的根路径健康检查成功并不代表数据库已可用；还需确认 `/comments?path=/playground` 与 `/comments/count?paths[]=/playground` 返回 200，再验证前端读取和跨域请求。不要通过重置现有数据库来排查部署问题。
 
 ## 首次部署
 
