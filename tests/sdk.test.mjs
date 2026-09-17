@@ -360,3 +360,37 @@ test('multiple widget instances keep their render roots and lifecycle independen
   assert.equal(secondEditor.value, 'second')
   assert.equal(document.querySelector('#comments').childElementCount, 0)
 })
+
+test('browser and OS labels render for roots and replies as text, and missing UA stays hidden', async t => {
+  const malicious = '<img src=x onerror="alert(1)">'
+  const f = fixture(t, async () =>
+    json(
+      list([
+        comment({
+          id: 'with-ua',
+          client: { browser: 'Chrome 66', os: 'macOS 10.13.4' },
+          children: [
+            comment({
+              id: 'reply-ua',
+              parent_id: 'with-ua',
+              client: { browser: malicious, os: 'Android 14' },
+            }),
+          ],
+        }),
+        comment({ id: 'without-ua' }),
+      ])
+    )
+  )
+  await tick()
+  assert.equal(
+    f.document
+      .querySelector('#with-ua > section > .vhead .vua')
+      .textContent.trim(),
+    'Chrome 66 · macOS 10.13.4'
+  )
+  assert.ok(
+    f.document.querySelector('#reply-ua .vua').textContent.includes(malicious)
+  )
+  assert.equal(f.document.querySelector('.vua img'), null)
+  assert.equal(f.document.querySelector('#without-ua .vua'), null)
+})

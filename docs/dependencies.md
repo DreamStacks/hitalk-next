@@ -32,6 +32,10 @@ markdown-it 15 已自带类型，但 markdown-it-emoji 的社区类型仍引用 
 
 移除 nanoid，使用 Workers 原生 crypto.randomUUID()。移除 tsx 直接依赖、Rollup 及其 resolve/commonjs/typescript/dts/postcss 插件和 tslib。Vitest 的可选工具依赖可能仍在锁文件中出现，不等于项目继续依赖旧构建流程。SDK 不再输出 CommonJS/UMD。
 
+## User-Agent
+
+采用 [Bowser](https://github.com/bowser-js/bowser) 2.14.1，在 Workers 侧解析 UA 的浏览器和系统信息。它不进入 SDK 构建；公开接口只返回解析后的标签。保留原始 UA，方便旧评论导入后使用相同的解析规则。
+
 ## 开发环境
 
 Vite 直接运行 examples/playground 中的 SDK 源码示例，CSS 原生热更新；TS 通过 [HMR dispose/data](https://vite.dev/guide/api-hmr) 清理旧实例并在内存中保留输入草稿。开发适配不进入 SDK 发布产物。统一 pnpm dev 先初始化缺失配置并应用本地迁移，再由 [concurrently](https://github.com/open-cli-tools/concurrently) 管理 Vite/Wrangler 进程，任一退出时结束其余进程。

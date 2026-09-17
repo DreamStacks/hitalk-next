@@ -2,6 +2,7 @@ import type { Comment, CommentCreateRequest } from '@hitalk/shared'
 import type { CommentRow, Page } from '../types'
 import { avatarHash } from './avatar'
 import { renderMarkdown } from './markdown'
+import { clientInfo, MAX_UA_LENGTH } from './user-agent'
 
 function timestamp(value: string): string {
   return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
@@ -34,6 +35,7 @@ export function publicComment(row: CommentRow): Comment {
     is_admin: Boolean(row.is_admin),
     created_at: timestamp(row.created_at),
     updated_at: timestamp(row.updated_at),
+    client: clientInfo(row.ua),
   }
 }
 
@@ -63,12 +65,13 @@ export async function createComment(
   db: D1Database,
   pageId: number,
   input: CommentCreateRequest,
-  isAdmin: boolean
+  isAdmin: boolean,
+  userAgent?: string
 ): Promise<CommentRow> {
   const row = await db
     .prepare(`INSERT INTO comments (
-    id, page_id, parent_id, nick, email, website, content_md, is_admin
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+    id, page_id, parent_id, nick, email, website, content_md, is_admin, ua
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
     .bind(
       crypto.randomUUID(),
       pageId,
@@ -77,7 +80,8 @@ export async function createComment(
       input.email || null,
       input.website || null,
       input.content,
-      isAdmin ? 1 : 0
+      isAdmin ? 1 : 0,
+      userAgent?.trim().slice(0, MAX_UA_LENGTH) || null
     )
     .first<CommentRow>()
   if (!row) throw new Error('Comment creation failed')

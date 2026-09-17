@@ -12,10 +12,12 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:backup:local": "wrangler d1 export DB --local",
     "db:backup:remote": "wrangler d1 export DB --remote",
-    "build": "wrangler deploy --dry-run --outdir dist"
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "db:seed": "wrangler d1 execute DB --local --file ../../examples/playground/seed.sql"
   },
   "dependencies": {
     "@hitalk/shared": "workspace:*",
+    "bowser": "^2.14.1",
     "hono": "^4.13.8",
     "markdown-it": "^15.0.2",
     "markdown-it-emoji": "^3.1.0",

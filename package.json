@@ -24,7 +24,8 @@
     "db:verify-backup": "node scripts/verify-backup.mjs",
     "test:worker": "vitest run --config vitest.integration.config.ts",
     "test:watch": "pnpm build && vitest",
-    "test:coverage": "pnpm build && vitest run --coverage"
+    "test:coverage": "pnpm build && vitest run --coverage",
+    "db:seed": "pnpm dev:setup && pnpm --filter @hitalk/server db:seed"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "1.1.11",

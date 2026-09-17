@@ -19,6 +19,14 @@ pnpm dev
 
 发布产物使用 `pnpm build` 构建，浏览器入口是 `Hitalk.mount()`，CSS 需要单独引入。SPA 卸载时调用返回实例的 `destroy()`。
 
+需要演示数据时，在根目录执行：
+
+```sh
+pnpm db:seed
+```
+
+向本地 `/playground` 导入 12 条根评论、4 条回复和 10 条点赞，包含置顶、Markdown、表情、长文与分页场景。数据均为虚构；重复执行不会重复插入或覆盖已有评论。该命令只操作本地 D1，不会发送邮件。刷新示例页即可看到结果；数据源为 `examples/playground/seed.sql`。
+
 验证当前代码：
 
 ```sh

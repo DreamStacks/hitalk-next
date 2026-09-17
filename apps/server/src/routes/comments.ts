@@ -89,7 +89,13 @@ app.post('/', async c => {
   const page = await getOrCreatePage(db, input.path, input.title)
   let row
   try {
-    row = await createComment(db, page.id, input, isAdmin(c))
+    row = await createComment(
+      db,
+      page.id,
+      input,
+      isAdmin(c),
+      c.req.header('user-agent')
+    )
   } catch (error) {
     if (
       error instanceof Error &&

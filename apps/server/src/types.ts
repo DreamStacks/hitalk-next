@@ -27,6 +27,7 @@ export interface CommentRow {
   email: string | null
   website: string | null
   content_md: string
+  ua: string | null
   like_count: number
   is_pinned: number
   is_admin: number

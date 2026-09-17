@@ -24,6 +24,14 @@ pnpm dev
 
 也可分开运行 `pnpm dev:server`、`pnpm dev:web`；首次单独启动前执行 `pnpm dev:setup`。SDK 发布产物仍使用 `pnpm build`，若需持续构建产物则执行 `pnpm --filter @hitalk/sdk dev`。自动化测试监听使用 `pnpm test:watch`。
 
+需要演示数据时，在根目录执行：
+
+```sh
+pnpm db:seed
+```
+
+向本地 `/playground` 导入 12 条根评论、4 条回复和 10 条点赞，包含置顶、Markdown、表情、长文与分页场景。数据均为虚构；重复执行不会重复插入或覆盖已有评论。该命令只操作本地 D1，不会发送邮件。刷新示例页即可看到结果；数据源为 `examples/playground/seed.sql`。
+
 ## 嵌入 SDK
 
 同时托管构建生成的 `hitalk.js` 和 `hitalk.css`：
@@ -74,7 +82,7 @@ ESM 可在没有 DOM 的服务端环境导入，但 mount 只能在浏览器执�
 
 管理接口仅接受 `Authorization: Bearer <ADMIN_TOKEN>`。未配置令牌时拒绝管理访问；URL 中的 token 不再支持。
 
-公开响应只含展示字段；不返回邮箱、UA、IP 标识、Markdown 原文或数据库页面 ID。头像使用服务端生成的 `avatar_hash`；昵称不再链接到邮箱。邮箱仍保存在数据库，用于可选的回复通知；不存储评论的 UA/IP 或 HTML 副本。头像摘要不是匿名化保证，Gravatar/CDN 仍是第三方服务。
+公开响应只含展示字段；不返回邮箱、原始 UA、IP 标识、Markdown 原文或数据库页面 ID。头像使用服务端生成的 `avatar_hash`；昵称不再链接到邮箱。邮箱仍保存在数据库，用于可选的回复通知；保存请求头中的 UA（最多 2,048 字符），用于展示浏览器与操作系统；不存储评论 IP 或 HTML 副本。公开的可选 `client` 字段包含 `browser` 与 `os` 展示文本；UA 缺失或未知时不展示，UA 不能作为可信身份或精确设备信息。头像摘要不是匿名化保证，Gravatar/CDN 仍是第三方服务。
 
 输入限制：昵称 80 字符、标题 200、正文 20,000、邮箱 254、网址 2,048、路径 1,024；请求体最多 128 KiB。网址仅允许无用户名/密码的 HTTP/HTTPS 地址。回复必须属于同一页面，最大链长 8 条（含根评论，为 D1 级联删除保留触发器深度余量）。
 

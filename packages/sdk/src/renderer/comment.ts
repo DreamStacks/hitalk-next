@@ -33,6 +33,13 @@ export function renderComment(
           >
           ${comment.is_pinned ? html`<span class="vpin">置顶</span>` : nothing}
           <span class="vtime">${timeAgo(comment.created_at)}</span>
+          ${
+            comment.client?.browser || comment.client?.os
+              ? html`<span class="vua" aria-label="浏览器与操作系统"
+                  >${[comment.client.browser, comment.client.os].filter(Boolean).join(' · ')}</span
+                >`
+              : nothing
+          }
         </div>
         <!-- Only the trusted Hitalk server's sanitized Markdown may enter this HTML boundary. -->
         <div class="vcontent" @click=${expandContent}>

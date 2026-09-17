@@ -18,6 +18,8 @@ export interface Comment {
   is_admin: boolean
   created_at: string
   updated_at: string
+  /** Parsed User-Agent labels. Raw UA stays on the server. */
+  client?: { browser?: string; os?: string }
   // 前端渲染时添加
   children?: Comment[]
 }

@@ -344,6 +344,14 @@
   font-size: 0.75rem;
 }
 
+.Hitalk .vua {
+  display: block;
+  margin-top: 4px;
+  color: var(--ht-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
 .Hitalk .vcontent {
   word-wrap: break-word;
   word-break: break-word;

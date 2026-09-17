@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import app from '../apps/server/src/index.ts'
 import { renderMarkdown } from '../apps/server/src/lib/markdown.ts'
+import { clientInfo } from '../apps/server/src/lib/user-agent.ts'
 import { buildCommentTree, hashIP } from '../apps/server/src/lib/db.ts'
 import { mailPlugin } from '../apps/server/src/plugins/mail.ts'
 import { PluginManager } from '../apps/server/src/lib/plugin-manager.ts'
@@ -483,7 +484,8 @@ test('database limits reply depth and stores only necessary comment data', async
   const columns = (
     await f.db.prepare('PRAGMA table_info(comments)').all()
   ).results.map(row => row.name)
-  for (const removed of ['content_html', 'ua', 'ip_hash'])
+  assert.ok(columns.includes('ua'))
+  for (const removed of ['content_html', 'ip_hash'])
     assert.ok(!columns.includes(removed))
   const rejected = await f.post({
     path: '/deep',
@@ -558,4 +560,88 @@ test.each([
   const html = renderMarkdown(source)
   assert.ok(!/<(?:script|svg|iframe)\b/i.test(html))
   assert.ok(!/(?:href|src)=["'](?:javascript|data):/i.test(html))
+})
+
+test('comments collect the request UA and expose parsed labels without the raw header', async t => {
+  const f = fixture(t)
+  const ua =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
+  const response = await f.post(
+    { path: '/ua', nick: 'Reader', content: 'hello', ua: 'spoofed body value' },
+    { 'User-Agent': ua }
+  )
+  assert.equal(response.status, 201)
+  const created = await response.json()
+  assert.deepEqual(created.client, {
+    browser: 'Chrome 66',
+    os: 'macOS 10.13.4',
+  })
+  assert.ok(!('ua' in created))
+  assert.equal(
+    (
+      await f.db
+        .prepare('SELECT ua FROM comments WHERE id = ?')
+        .bind(created.id)
+        .first()
+    ).ua,
+    ua
+  )
+  const reply = await f.post(
+    { path: '/ua', nick: 'Reply', content: 'reply', parent_id: created.id },
+    { 'User-Agent': ua }
+  )
+  assert.equal(reply.status, 201)
+  const page = await (await f.request('/comments?path=/ua')).json()
+  assert.deepEqual(page.comments[0].client, created.client)
+  assert.deepEqual(page.comments[0].children[0].client, created.client)
+  assert.ok(!('ua' in page.comments[0].children[0]))
+  // Historical imports can populate the same column without changing the API.
+  await f.db
+    .prepare('UPDATE comments SET ua = NULL WHERE id = ?')
+    .bind(created.id)
+    .run()
+  const missing = await (await f.request('/comments?path=/ua')).json()
+  assert.ok(!('client' in missing.comments[0]))
+})
+
+test('UA storage is bounded and unknown clients do not produce invented labels', async t => {
+  const f = fixture(t)
+  const response = await f.post(
+    { path: '/ua', nick: 'Reader', content: 'hello' },
+    { 'User-Agent': 'x'.repeat(3000) }
+  )
+  assert.equal(response.status, 201)
+  const created = await response.json()
+  assert.ok(!('client' in created))
+  assert.equal(
+    (
+      await f.db
+        .prepare('SELECT length(ua) AS size FROM comments WHERE id = ?')
+        .bind(created.id)
+        .first()
+    ).size,
+    2048
+  )
+})
+
+test.each([
+  [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0',
+    { browser: 'Microsoft Edge 140', os: 'Windows 10' },
+  ],
+  [
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    { browser: 'Safari 18', os: 'iOS 18.0' },
+  ],
+  [
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
+    { browser: 'Chrome 140', os: 'Android 14' },
+  ],
+  [
+    'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
+    { browser: 'Firefox 140', os: 'Linux' },
+  ],
+  [null, undefined],
+])('UA parser recognizes common clients: %s', (ua, expected) => {
+  assert.deepEqual(clientInfo(ua), expected)
 })

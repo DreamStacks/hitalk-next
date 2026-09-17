@@ -21,6 +21,7 @@ export default defineConfig(async () => ({
           name: 'node',
           include: [
             'tests/backup.test.mjs',
+            'tests/seed.test.mjs',
             'tests/admin.test.mjs',
             'tests/package.test.mjs',
           ],
