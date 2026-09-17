@@ -1,23 +1,6 @@
 import { isValidEmail, isValidWebsite } from '@hitalk/shared'
 
 /**
- * HTML 工具
- */
-export const HtmlUtil = {
-  /**
-   * HTML 转义
-   */
-  encode(html: string): string {
-    return html
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  },
-}
-
-/**
  * 邮件验证
  */
 export const check = {
@@ -86,17 +69,4 @@ export function dateFormat(date: Date): string {
 export function getGravatarUrl(hash: string, avatar: string = 'mm'): string {
   const safeHash = /^[a-f0-9]{32}$/.test(hash) ? hash : ''
   return `https://gravatar.loli.net/avatar/${safeHash}?s=40&d=${encodeURIComponent(avatar)}`
-}
-
-/**
- * 事件处理
- */
-export const Event = {
-  on(event: string, el: HTMLElement, handler: EventListener) {
-    el.addEventListener(event, handler)
-  },
-
-  off(event: string, el: HTMLElement, handler: EventListener) {
-    el.removeEventListener(event, handler)
-  },
 }

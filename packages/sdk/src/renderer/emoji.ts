@@ -1,3 +1,5 @@
+import { html, type TemplateResult } from 'lit-html'
+
 /**
  * 表情渲染器
  */
@@ -8,53 +10,60 @@ const emojiData = {
   阿鲁: `高兴|小怒|脸红|内伤|装大款|赞一个|害羞|汗|吐血倒地|深思|不高兴|无语|亲亲|口水|尴尬|中指|想一想|哭泣|便便|献花|皱眉|傻笑|狂汗|吐|喷水|看不见|鼓掌|阴暗|长草|献黄瓜|邪恶|期待|得意|吐舌|喷血|无所谓|观察|暗地观察|肿包|中枪|大囧|呲牙|抠鼻|不说话|咽气|欢呼|锁眉|蜡烛|坐等|击掌|惊喜|喜极而泣|抽烟|不出所料|愤怒|无奈|黑线|投降|看热闹|扇耳光|小眼睛|中刀`,
 }
 
-const suffix = '@2x'
+const categories = Object.entries(emojiData).map(([name, values], index) => ({
+  name,
+  index,
+  emojis: values.split('|'),
+  prefix: name === '泡泡' ? '@' : '#',
+  className: name === '泡泡' ? 'newpaopao' : 'alu',
+}))
 
-/**
- * 渲染表情选择器
- */
-export function renderEmojiPicker(): string {
-  const categories = Object.keys(emojiData)
-  let itemsHtml = ''
-  let tabsHtml = ''
-
-  categories.forEach((category, index) => {
-    const emojis = emojiData[category as keyof typeof emojiData].split('|')
-    const isActive = index === 0
-    const prefix = category === '泡泡' ? '@' : '#'
-    const className = category === '泡泡' ? 'newpaopao' : 'alu'
-
-    const items = emojis
-      .map(
-        emoji => `
-      <li class="smiles-item" title="${emoji}" data-input="${prefix}(${emoji})">
-        <img class="biaoqing ${className}"
-             title="${emoji}"
-             src="https://cdn.ihoey.com/${className}/${emoji}${suffix}.png"
-             alt="${emoji}"
-        />
-      </li>
-    `
-      )
-      .join('')
-
-    itemsHtml += `
-      <ul class="smiles-items smiles-items-${className}${isActive ? ' smiles-items-show' : ''}" data-id="${index}">
-        ${items}
+export function renderEmojiPicker(
+  active: number,
+  onCategory: (index: number) => void,
+  onSelect: (value: string) => void
+): TemplateResult {
+  return html`<div class="smiles-body">
+    ${categories.map(
+      category => html`
+        <ul
+          class="smiles-items smiles-items-${category.className}${active === category.index ? ' smiles-items-show' : ''}"
+          data-id=${category.index}
+        >
+          ${category.emojis.map(
+            emoji => html`
+              <li
+                class="smiles-item"
+                title=${emoji}
+                data-input=${`${category.prefix}(${emoji})`}
+                @click=${() => onSelect(`${category.prefix}(${emoji})`)}
+              >
+                <img
+                  class="biaoqing ${category.className}"
+                  title=${emoji}
+                  src=${`https://cdn.ihoey.com/${category.className}/${emoji}@2x.png`}
+                  alt=${emoji}
+                />
+              </li>
+            `
+          )}
+        </ul>
+      `
+    )}
+    <div class="smiles-bar">
+      <ul class="smiles-packages">
+        ${categories.map(
+          category => html`
+            <li
+              class="smiles-name${active === category.index ? ' smiles-package-active' : ''}"
+              data-id=${category.index}
+              @click=${() => onCategory(category.index)}
+            >
+              <span>${category.name}</span>
+            </li>
+          `
+        )}
       </ul>
-    `
-
-    tabsHtml += `<li class="smiles-name${isActive ? ' smiles-package-active' : ''}" data-id="${index}">
-      <span>${category}</span>
-    </li>`
-  })
-
-  return `
-    <div class="smiles-body">
-      ${itemsHtml}
-      <div class="smiles-bar">
-        <ul class="smiles-packages">${tabsHtml}</ul>
-      </div>
     </div>
-  `
+  </div>`
 }

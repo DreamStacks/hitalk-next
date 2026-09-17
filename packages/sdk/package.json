@@ -23,6 +23,9 @@
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "lit-html": "3.3.3"
+  },
   "devDependencies": {
     "@hitalk/shared": "workspace:*",
     "@tsdown/css": "^0.23.0",

@@ -55,6 +55,10 @@ import { mount } from '@hitalk/sdk'
 import '@hitalk/sdk/hitalk.css'
 ```
 
+SDK 使用 lit-html 管理模板与局部 DOM 更新，渲染器已包含在 ESM/IIFE 产物中，无需宿主单独加载。接入 React 时在 effect 中挂载并在清理函数中销毁；Vue 使用 onMounted/onBeforeUnmount；Hexo 等静态站点使用上面的 script 方式。宿主框架只管理挂载容器，不渲染容器内部内容。
+
+ESM 可在没有 DOM 的服务端环境导入，但 mount 只能在浏览器执行；SDK 不提供服务端评论渲染或 hydration。SPA 切换文章路径时销毁并重新挂载，refresh 只刷新当前路径。
+
 构建产物可打包，但本仓库的构建和检查命令不会发布 npm 包。
 
 ## API 契约
@@ -85,7 +89,7 @@ pnpm test:worker                   # 隔离的真实 Worker/D1 集成与备份�
 
 CI 执行上述三项。`test:worker` 创建临时配置和本地数据库，使用测试令牌，不访问现有数据库、不发送邮件，结束后清理临时文件。
 
-Vitest 统一运行测试：后端在 workerd + 本地 D1 中执行，前端在 jsdom 中验证源码交互与 IIFE 产物，备份在 Node SQLite 中独立恢复。测试覆盖鉴权、字段泄漏、输入校验、计数、回复归属、XSS、SDK 状态/销毁及发布包类型。`test:worker` 另验证完整 Wrangler 启动、迁移和备份导出链路。
+Vitest 统一运行测试：后端在 workerd + 本地 D1 中执行，前端在 jsdom 中验证源码交互与 IIFE 产物，备份在 Node SQLite 中独立恢复。测试覆盖鉴权、字段泄漏、输入校验、计数、回复归属、XSS、SDK 状态/销毁及发布包类型。`test:worker` 使用独立的 Vitest 集成测试配置，验证完整 Wrangler 启动、迁移和备份导出链路，并在测试结束或失败时清理进程与临时目录。
 
 `pnpm test:watch` 进入交互测试；`pnpm test:coverage` 生成 `coverage/index.html`。覆盖率门槛为行 85%、语句/函数 80%、分支 60%。测试只使用固定假令牌和临时本地数据，不读取开发邮件密钥。
 
@@ -104,7 +108,8 @@ apps/server/src/plugins/   可选邮件通知
 apps/server/migrations/    版本化数据库结构、约束和计数触发器
 packages/shared/          公开 API 类型与 Valibot 输入校验
 packages/sdk/src/         请求、状态、渲染与组件生命周期
-scripts/                  Worker 集成检查与备份恢复校验
+tests/                    Vitest：SDK、发布产物、后端、备份和真实 CLI 集成
+scripts/                  运维用备份恢复校验 CLI
 ```
 
 技术栈版本与取舍见 [依赖决策](docs/dependencies.md)，架构与剩余限制见 [维护说明](docs/architecture.md)。邮件为尽力发送，尚无持久队列、自动重试或投递状态；匿名提交尚无限流、验证码与审核，开放到公网前应配置入口防滥用。分页限制根评论数，不限制单个讨论串的回复数量。Markdown 是唯一持久化的评论内容。

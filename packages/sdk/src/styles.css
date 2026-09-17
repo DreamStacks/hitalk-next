@@ -162,6 +162,10 @@
   transition: all 0.3s;
 }
 
+.Hitalk .vbtn[hidden] {
+  display: none;
+}
+
 .Hitalk .vbtn:hover,
 .Hitalk .vbtn:active {
   color: var(--ht-accent);

@@ -2,7 +2,7 @@
 
 核查日期：2026-09-17。版本来自 npm 发布元数据、包的 peerDependencies 和官方文档；以 pnpm-lock.yaml 的实际锁定结果为准。
 
-目标是轻量、可嵌入的自托管博客评论系统。维持 Hono + Cloudflare Workers/D1 + 原生 TypeScript SDK：目前没有需要 React、SSR 框架、ORM 或额外状态库才能解决的问题。新工具应降低维护成本或补足可验证性。
+目标是轻量、可嵌入的自托管博客评论系统。维持 Hono + Cloudflare Workers/D1 + TypeScript + lit-html SDK：目前没有需要 React、SSR 框架、ORM 或额外状态库才能解决的问题。新工具应降低维护成本或补足可验证性。
 
 ## 本轮采用
 
@@ -10,6 +10,7 @@
 | --------------- | --------------------------------------------------------- | ---------------------------------------------------------------- |
 | 类型检查        | TypeScript 7.0.2                                          | 使用原生编译器，移除 baseUrl；构建和消费方声明均实际编译验证     |
 | SDK 构建        | tsdown 0.23.0 / Rolldown / Oxc                            | 替换 Rollup 及多项插件；统一产出 ESM、IIFE、独立类型声明         |
+| DOM 渲染        | lit-html 3.3.3                                            | 模板绑定、按 ID 复用节点、声明式事件；不绑定宿主框架             |
 | CSS             | @tsdown/css 0.23.0 + Lightning CSS 1.33.0                 | 集成提取和压缩，替换 PostCSS 构建插件链                          |
 | 代码检查        | Oxlint 1.83.0 + oxlint-tsgolint 7.0.2001                  | 开启类型感知规则，包括未处理 Promise；实际探针验证规则能阻止错误 |
 | 格式化          | Oxfmt 0.68.0                                              | 统一格式，加入 check/CI                                          |
@@ -31,6 +32,14 @@ markdown-it 15 已自带类型，但 markdown-it-emoji 的社区类型仍引用 
 
 移除 nanoid，使用 Workers 原生 crypto.randomUUID()。移除 tsx 直接依赖、Rollup 及其 resolve/commonjs/typescript/dts/postcss 插件和 tslib。Vitest 的可选工具依赖可能仍在锁文件中出现，不等于项目继续依赖旧构建流程。SDK 不再输出 CommonJS/UMD。
 
+## DOM 渲染与测试组织
+
+采用独立的 [lit-html](https://lit.dev/docs/libraries/standalone-templates/)，无需 LitElement 或 Web Components。评论使用 [repeat](https://lit.dev/docs/templates/lists/#the-repeat-directive) 按 ID 保留 DOM 身份，编辑器独立持有草稿。用户文本使用模板绑定，只有可信 API 输出的已净化 Markdown 使用 unsafeHTML。
+
+lit-html 和指令均内联进 ESM/IIFE，不要求 Vue、React 或 Hexo 消费方加载额外渲染运行时。当前 IIFE gzip 约 12.7 kB，相比迁移前约 7.7 kB 增加 5 kB；CSS gzip 约 2.3 kB。体积增加换取模板与事件维护、局部更新和节点复用，暂不引入状态管理库。
+
+所有自动化测试由 Vitest 运行：SDK 源码使用 jsdom 环境；管理页、发布产物和备份校验独立分组；后端使用 workerd/D1。原 scripts/check-worker.mjs 已迁为 tests/worker.integration.test.mjs，独立配置通过 pnpm test:worker 执行，进程与临时数据库由生命周期钩子清理。scripts/verify-backup.mjs 是运维 CLI，继续保留，其核心校验由测试直接调用。
+
 ## Sätteri 的决定
 
 研究的是用户指定的 [bruits/satteri](https://github.com/bruits/satteri)，npm 版本 0.10.5。
@@ -51,4 +60,4 @@ markdown-it 15 已自带类型，但 markdown-it-emoji 的社区类型仍引用 
 
 真实 D1 测试发现 Node SQLite 无法复现的深链级联删除失败。当前最大链长为 8（含根评论），测试包含底层点赞、根评论删除、整页删除和超深回复拒绝。测试使用假令牌与本地 D1，不读取开发邮件凭据。
 
-SDK 测试使用 jsdom，尚不代表真实浏览器兼容性或视觉验收。下一步应结合实际博客页面补浏览器端验收；有持续跨浏览器回归需求时再加入 Playwright。当前无需仅为技术栈完整而新增 UI 框架、ORM、数据库服务或测试库。
+SDK 自动化测试使用 jsdom；本轮另在真实浏览器中检查 ESM 产物的点赞、重排、回复目标消失和草稿保留，并修复按钮样式覆盖 hidden 的问题。这不代表完整跨浏览器兼容性或视觉验收，下一步应结合实际博客页面补验收；有持续跨浏览器回归需求时再加入 Playwright。当前无需仅为技术栈完整而新增 UI 框架、ORM、数据库服务或测试库。

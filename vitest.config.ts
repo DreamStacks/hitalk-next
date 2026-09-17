@@ -19,7 +19,20 @@ export default defineConfig(async () => ({
       {
         test: {
           name: 'node',
-          include: ['tests/backup.test.mjs', 'tests/sdk.test.mjs'],
+          include: [
+            'tests/backup.test.mjs',
+            'tests/admin.test.mjs',
+            'tests/package.test.mjs',
+          ],
+          restoreMocks: true,
+        },
+      },
+      {
+        test: {
+          name: 'sdk',
+          environment: 'jsdom',
+          environmentOptions: { jsdom: { url: 'https://example.com/article' } },
+          include: ['tests/sdk.test.mjs'],
           restoreMocks: true,
         },
       },

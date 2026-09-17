@@ -2,7 +2,9 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: { hitalk: 'src/index.ts' },
-  platform: 'browser',
+  platform: 'neutral',
+  // Lit's Node condition keeps ESM importable during SSR and still renders in browsers.
+  inputOptions: { resolve: { conditionNames: ['node', 'import', 'default'] } },
   target: 'es2022',
   format: ['esm', 'iife'],
   globalName: 'Hitalk',
@@ -16,8 +18,8 @@ export default defineConfig({
   },
   dts: { generator: 'tsgo', tsconfig: '../../tsconfig.sdk-build.json' },
   deps: {
-    alwaysBundle: ['@hitalk/shared', 'valibot'],
-    onlyBundle: ['valibot'],
+    alwaysBundle: ['@hitalk/shared', 'valibot', /^lit-html(?:\/|$)/],
+    onlyBundle: ['valibot', 'lit-html'],
   },
   sourcemap: true,
   minify: true,

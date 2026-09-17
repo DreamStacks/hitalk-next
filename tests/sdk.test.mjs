@@ -1,101 +1,31 @@
 import { test, vi } from 'vitest'
 import * as HitalkSDK from '../packages/sdk/src/index.ts'
 import assert from 'node:assert/strict'
-import {
-  readFileSync,
-  existsSync,
-  mkdtempSync,
-  writeFileSync,
-  copyFileSync,
-  rmSync,
-} from 'node:fs'
-import { execFileSync } from 'node:child_process'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { runInContext } from 'node:vm'
-import { JSDOM } from 'jsdom'
-import { adminPage } from '../apps/server/src/ui/admin-page.ts'
-
-const sdk = readFileSync(
-  new URL('../packages/sdk/dist/hitalk.js', import.meta.url),
-  'utf8'
-)
-const tick = async () => {
-  for (let i = 0; i < 6; i++)
-    await new Promise(resolve => setImmediate(resolve))
-}
-const comment = (overrides = {}) => ({
-  id: '123-nanoid',
-  parent_id: null,
-  nick: 'Reader',
-  avatar_hash: 'a'.repeat(32),
-  content_html: '<p>hello</p>',
-  like_count: 0,
-  is_admin: false,
-  is_pinned: false,
-  created_at: '2026-01-01T00:00:00Z',
-  updated_at: '2026-01-01T00:00:00Z',
-  children: [],
-  ...overrides,
-})
-const list = (comments, page = 1, more = false) => ({
-  comments,
-  total: comments.length,
-  page_info: { path: '/article', comment_count: comments.length },
-  pagination: { page, page_size: 10, has_more: more },
-})
-const json = (body, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-function deferred() {
-  let resolve
-  const promise = new Promise(done => {
-    resolve = done
-  })
-  return { promise, resolve }
-}
+import { tick, json, list, comment, deferred } from './helpers/comments.mjs'
 
 function fixture(t, handler, beforeMount = () => {}) {
-  const dom = new JSDOM('<div id="comments"></div>', {
-    url: 'https://example.com/article',
-    runScripts: 'outside-only',
-  })
-  dom.window.fetch = handler
-  beforeMount(dom.window)
-  for (const key of [
-    'window',
-    'document',
-    'location',
-    'HTMLElement',
-    'AbortController',
-  ])
-    vi.stubGlobal(key, key === 'window' ? dom.window : dom.window[key])
+  document.body.replaceWith(document.createElement('body'))
+  document.body.innerHTML = '<div id="comments"></div>'
+  localStorage.clear()
   const storageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis,
+    window,
     'localStorage'
   )
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    get: () => dom.window.localStorage,
+  let instance
+  t.onTestFinished(() => {
+    instance?.destroy()
+    vi.unstubAllGlobals()
+    Object.defineProperty(window, 'localStorage', storageDescriptor)
+    document.body.replaceChildren()
   })
   vi.stubGlobal('fetch', handler)
-  dom.window.Hitalk = HitalkSDK
-  const instance = dom.window.Hitalk.mount('#comments', {
+  beforeMount(window)
+  window.Hitalk = HitalkSDK
+  instance = HitalkSDK.mount('#comments', {
     server: 'https://api.example.com',
     pageSize: 10,
   })
-  t.onTestFinished(() => {
-    instance.destroy()
-    vi.unstubAllGlobals()
-    if (storageDescriptor)
-      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
-    else delete globalThis.localStorage
-    dom.window.close()
-  })
-  return { dom, window: dom.window, document: dom.window.document, instance }
+  return { window, document, instance }
 }
 
 test('untrusted nickname, website and cached input cannot create event attributes', async t => {
@@ -183,7 +113,10 @@ test('submit suppresses double clicks and does not turn cache failure into submi
   await tick()
   assert.equal(editor.value, '')
   assert.equal(submit.disabled, false)
-  assert.equal(f.document.querySelector('.hitalk-status').textContent, '')
+  assert.equal(
+    f.document.querySelector('.hitalk-status').textContent.trim(),
+    ''
+  )
 })
 
 test('errors are visible as text and failed submission retains the draft', async t => {
@@ -270,75 +203,6 @@ test('remount destroys the old instance and leaves only the new UI', async t => 
   second.destroy()
 })
 
-test('admin renders hostile source Markdown and nickname as text, sends credentials only in headers', async t => {
-  const dom = new JSDOM(adminPage, {
-    url: 'https://example.com/admin?token=legacy',
-    runScripts: 'outside-only',
-  })
-  t.onTestFinished(() => dom.window.close())
-  const requests = []
-  dom.window.fetch = async (url, init) => {
-    requests.push({ url, init })
-    return json({
-      comments: [
-        {
-          ...comment(),
-          content_md: '"><img src=x onerror=alert(1)>',
-          nick: '<script>bad</script>',
-          email: 'person@example.invalid',
-          page_path: '/article',
-        },
-      ],
-      has_more: false,
-    })
-  }
-  runInContext(
-    dom.window.document.querySelector('script').textContent,
-    dom.getInternalVMContext()
-  )
-  const input = dom.window.document.querySelector('#token')
-  input.value = 'test-admin'
-  dom.window.document
-    .querySelector('#login')
-    .dispatchEvent(new dom.window.Event('submit', { cancelable: true }))
-  await tick()
-  assert.equal(dom.window.location.search, '')
-  assert.equal(requests[0].init.headers.Authorization, 'Bearer test-admin')
-  assert.ok(!requests[0].url.includes('token'))
-  assert.equal(input.value, '')
-  assert.equal(
-    dom.window.document.querySelectorAll(
-      '#list img, #list script, #list [onerror]'
-    ).length,
-    0
-  )
-  assert.ok(
-    dom.window.document
-      .querySelector('#list')
-      .textContent.includes('<script>bad</script>')
-  )
-})
-
-test('package entrypoints and bundled declarations exist independently of workspace types', async () => {
-  const root = new URL('../packages/sdk/', import.meta.url)
-  const pkg = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'))
-  for (const path of [
-    pkg.main,
-    pkg.module,
-    pkg.types,
-    'dist/hitalk.js',
-    'dist/hitalk.css',
-  ])
-    assert.ok(existsSync(new URL(path, root)), path)
-  const declarations = readFileSync(new URL(pkg.types, root), 'utf8')
-  assert.ok(!declarations.includes('@hitalk/shared'))
-  assert.ok(declarations.includes('destroy(): void'))
-  assert.equal(
-    typeof (await import(new URL(pkg.module, root).href)).mount,
-    'function'
-  )
-})
-
 test('a list request started before a successful like cannot reset the count', async t => {
   const pending = deferred()
   let loads = 0
@@ -372,64 +236,127 @@ test('a failed initial load can be retried from the rendered control', async t =
   assert.equal(f.document.querySelectorAll('.vcard').length, 1)
 })
 
-test('standalone browser bundle exposes mount without a module loader', async t => {
-  const dom = new JSDOM('<div id="comments"></div>', {
-    url: 'https://example.com/article',
-    runScripts: 'outside-only',
+test('keyed roots and replies retain nodes, focus, selection and expanded content when reordered', async t => {
+  let reordered = false
+  let likes = 0
+  const first = comment({
+    id: 'root-a',
+    children: [
+      comment({ id: 'child-a', parent_id: 'root-a' }),
+      comment({ id: 'child-b', parent_id: 'root-a' }),
+    ],
   })
-  dom.window.fetch = async () => json(list([]))
-  runInContext(sdk, dom.getInternalVMContext())
-  const instance = dom.window.Hitalk.mount('#comments', {
-    server: 'https://api.example.com',
-  })
-  t.onTestFinished(() => {
-    instance.destroy()
-    dom.window.close()
+  const second = comment({ id: 'root-b' })
+  const f = fixture(t, async (_url, init) => {
+    if (init.method === 'POST')
+      return json({ success: true, like_count: ++likes })
+    const root = reordered
+      ? { ...first, children: [...first.children].reverse() }
+      : first
+    return json(list(reordered ? [second, root] : [root, second]))
   })
   await tick()
-  assert.equal(dom.window.document.querySelectorAll('.veditor').length, 1)
+  const root = document.getElementById('root-a')
+  const child = document.getElementById('child-a')
+  const content = child.querySelector('.vcontent')
+  content.classList.add('expand')
+  content.click()
+  child.querySelector('.vat').click()
+  const editor = document.querySelector('.veditor')
+  editor.value = 'draft survives reordering'
+  editor.setSelectionRange(3, 8, 'backward')
+  reordered = true
+  await f.instance.refresh()
+  assert.equal(document.getElementById('root-a'), root)
+  assert.equal(document.getElementById('child-a'), child)
+  assert.equal(document.activeElement, editor)
+  assert.equal(editor.selectionStart, 3)
+  assert.equal(editor.selectionEnd, 8)
+  assert.equal(editor.selectionDirection, 'backward')
+  assert.equal(editor.value, 'draft survives reordering')
+  assert.equal(content.classList.contains('expand'), false)
+  assert.deepEqual(
+    [...root.querySelectorAll('.vchildren .vcard')].map(node => node.id),
+    ['child-b', 'child-a']
+  )
+  await f.instance.refresh()
+  child.querySelector('.vlike').click()
+  await tick()
+  assert.equal(likes, 1)
+  assert.equal(document.getElementById('child-a'), child)
+  assert.equal(document.querySelector('.veditor'), editor)
 })
 
-test('published declarations typecheck without workspace or dependency access', t => {
-  const directory = mkdtempSync(join(tmpdir(), 'hitalk-types-'))
-  t.onTestFinished(() => rmSync(directory, { recursive: true, force: true }))
-  copyFileSync(
-    new URL('../packages/sdk/dist/hitalk.d.ts', import.meta.url),
-    join(directory, 'hitalk.d.ts')
+test('removing a reply target returns the same focused draft to the top-level editor', async t => {
+  let removed = false
+  const f = fixture(t, async () => json(list(removed ? [] : [comment()])))
+  await tick()
+  document.querySelector('.vat').click()
+  const editor = document.querySelector('.veditor')
+  editor.value = 'keep this unsent reply'
+  removed = true
+  await f.instance.refresh()
+  assert.equal(document.querySelector('.veditor'), editor)
+  assert.equal(editor.closest('.vcard'), null)
+  assert.equal(document.activeElement, editor)
+  assert.equal(editor.value, 'keep this unsent reply')
+  assert.equal(
+    document.querySelector('.vcancel-reply').classList.contains('dn'),
+    true
   )
-  writeFileSync(
-    join(directory, 'consumer.ts'),
-    `import { mount, type CommentCreateRequest } from './hitalk';
-const request: CommentCreateRequest = { path: '/article', nick: 'Reader', content: '**hello**' };
-const instance = mount('#comments', { server: 'https://example.com', path: request.path });
-void instance.refresh(); instance.destroy();`
+})
+
+test('emoji category changes and outside closing preserve inputs and insert one emoji', async t => {
+  const f = fixture(t, async () => json(list([])))
+  await tick()
+  const input = document.querySelector('.veditor')
+  const nick = document.querySelector('.vnick')
+  input.value = 'draft'
+  nick.value = 'unsaved nickname'
+  document.querySelector('.smiles-logo span').click()
+  assert.equal(
+    document.querySelector('.smiles').classList.contains('smiles-open'),
+    true
   )
-  writeFileSync(
-    join(directory, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        target: 'ES2022',
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        strict: true,
-        noEmit: true,
-        types: [],
-        lib: ['ES2022', 'DOM'],
-      },
-      include: ['consumer.ts'],
-    })
+  document.querySelector('.smiles-name[data-id="1"] span').click()
+  assert.equal(document.querySelector('.smiles-items-show').dataset.id, '1')
+  document.querySelector('.smiles-items-show .smiles-item img').click()
+  assert.equal(input.value, 'draft #(高兴) ')
+  assert.equal(
+    document.querySelector('.smiles').classList.contains('smiles-open'),
+    false
   )
-  assert.doesNotThrow(() =>
-    execFileSync(
-      process.execPath,
-      [
-        fileURLToPath(
-          new URL('../node_modules/typescript/bin/tsc', import.meta.url)
-        ),
-        '-p',
-        join(directory, 'tsconfig.json'),
-      ],
-      { stdio: 'pipe' }
-    )
+  assert.equal(document.activeElement, input)
+  assert.equal(nick.value, 'unsaved nickname')
+  await f.instance.refresh()
+  document.querySelector('.smiles-logo').click()
+  document.body.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+  assert.equal(
+    document.querySelector('.smiles').classList.contains('smiles-open'),
+    false
   )
+  assert.equal(input.value, 'draft #(高兴) ')
+})
+
+test('multiple widget instances keep their render roots and lifecycle independent', async t => {
+  const f = fixture(t, async () => json(list([comment()])))
+  const other = document.createElement('div')
+  document.body.append(other)
+  const second = HitalkSDK.mount(other, {
+    server: 'https://api.example.com',
+    path: '/other',
+  })
+  t.onTestFinished(() => second.destroy())
+  await tick()
+  const firstEditor = document.querySelector('#comments .veditor')
+  const secondEditor = other.querySelector('.veditor')
+  firstEditor.value = 'first'
+  secondEditor.value = 'second'
+  document.querySelector('#comments .vat').click()
+  assert.equal(secondEditor.closest('.vcard'), null)
+  f.instance.destroy()
+  await second.refresh()
+  assert.equal(other.querySelector('.veditor'), secondEditor)
+  assert.equal(secondEditor.value, 'second')
+  assert.equal(document.querySelector('#comments').childElementCount, 0)
 })

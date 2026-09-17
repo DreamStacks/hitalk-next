@@ -18,7 +18,7 @@
     "test": "pnpm build && vitest run",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:coverage",
     "db:verify-backup": "node scripts/verify-backup.mjs",
-    "test:worker": "node scripts/check-worker.mjs",
+    "test:worker": "vitest run --config vitest.integration.config.ts",
     "test:watch": "pnpm build && vitest",
     "test:coverage": "pnpm build && vitest run --coverage"
   },

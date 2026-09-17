@@ -1,8 +1,9 @@
+import { html, nothing, render } from 'lit-html'
+import { createRef, ref } from 'lit-html/directives/ref.js'
 import type { HitalkOptions } from '@hitalk/shared'
 import { HitalkAPI } from './api'
 import { Store } from './store'
 import { Editor, type EditorData } from './ui/Editor'
-import { Loading } from './ui/Loading'
 import { CommentList } from './ui/CommentList'
 import { check } from './utils'
 import './styles.css'
@@ -21,7 +22,13 @@ export class Hitalk {
   private container: HTMLElement
   private editor: Editor
   private editorContainer: HTMLElement
-  private loading: Loading
+  private view: HTMLElement
+  private editorHome = createRef<HTMLElement>()
+  private listContainer = createRef<HTMLElement>()
+  private message = ''
+  private total: number | null = null
+  private hasMore = false
+  private retry = false
   private commentList: CommentList
   private options: Required<HitalkOptions>
   private unsubscribe: () => void
@@ -56,13 +63,13 @@ export class Hitalk {
     }
     this.api = new HitalkAPI(this.options.server)
     el.classList.add('Hitalk')
-    el.innerHTML = `<div class="editor-container"></div>
-      <div class="info"><div class="count"></div></div>
-      <div class="hitalk-status" role="status" aria-live="polite"></div>
-      <button type="button" class="vbtn hitalk-retry" hidden>重新加载</button>
-      <div class="loading-container"></div><div class="comment-list-container"></div>
-      <button type="button" class="vbtn hitalk-more" hidden>加载更多</button>`
-    this.editorContainer = el.querySelector<HTMLElement>('.editor-container')!
+    this.view = el.ownerDocument.createElement('div')
+    this.view.className = 'hitalk-root'
+    el.replaceChildren(this.view)
+    this.renderShell()
+    this.editorContainer = el.ownerDocument.createElement('div')
+    this.editorContainer.className = 'editor-container'
+    this.editorHome.value!.append(this.editorContainer)
     this.editor = new Editor(
       this.editorContainer,
       this.store.getUserInfo(),
@@ -72,25 +79,17 @@ export class Hitalk {
       },
       () => this.handleCancelReply()
     )
-    this.loading = new Loading(
-      el.querySelector<HTMLElement>('.loading-container')!
-    )
     this.commentList = new CommentList(
-      el.querySelector<HTMLElement>('.comment-list-container')!,
+      this.listContainer.value!,
       this.options.avatar,
-      (id, nick) => this.handleReply(id, nick),
-      id => {
-        void this.handleLike(id)
+      {
+        onReply: (id, nick) => this.handleReply(id, nick),
+        onLike: id => {
+          void this.handleLike(id)
+        },
       }
     )
     this.unsubscribe = this.store.subscribe(() => this.updateUI())
-    el.querySelector('.hitalk-retry')!.addEventListener('click', () => {
-      void this.refresh()
-    })
-    el.querySelector('.hitalk-more')!.addEventListener('click', () => {
-      if (!this.loadingPage && !this.submitting)
-        void this.loadComments(this.page + 1)
-    })
     instances.set(el, this)
     void this.refresh()
   }
@@ -104,13 +103,9 @@ export class Hitalk {
     const sequence = ++this.loadSequence
     const likeRevision = this.likeRevision
     this.loadingPage = true
+    this.retry = false
+    this.message = ''
     this.busy(1)
-    this.showMessage('')
-    const more =
-      this.container.querySelector<HTMLButtonElement>('.hitalk-more')!
-    more.disabled = true
-    this.container.querySelector<HTMLButtonElement>('.hitalk-retry')!.hidden =
-      true
     try {
       const result = await this.api.fetchComments(
         this.options.path,
@@ -141,22 +136,17 @@ export class Hitalk {
         ...new Map(comments.map(comment => [comment.id, comment])).values(),
       ])
       this.page = page
-      this.container.querySelector('.count')!.textContent =
-        `评论(${result.total})`
-      more.hidden = !result.pagination.has_more
+      this.total = result.total
+      this.hasMore = result.pagination.has_more
     } catch (error) {
       if (!this.destroyed && sequence === this.loadSequence) {
         this.showMessage(`加载失败：${this.errorMessage(error)}`)
-        this.container.querySelector<HTMLButtonElement>(
-          '.hitalk-retry'
-        )!.hidden = false
+        this.retry = true
       }
     } finally {
-      this.busy(-1)
-      if (!this.destroyed && sequence === this.loadSequence) {
+      if (!this.destroyed && sequence === this.loadSequence)
         this.loadingPage = false
-        more.disabled = false
-      }
+      this.busy(-1)
     }
   }
 
@@ -203,51 +193,47 @@ export class Hitalk {
     }
   }
 
-  /** Move the live editor outside the list before replacing list nodes, then restore it. */
   private updateUI() {
-    const focused = this.editorContainer.contains(document.activeElement)
-      ? (document.activeElement as HTMLElement)
-      : null
-    this.container.prepend(this.editorContainer)
+    const active = this.container.ownerDocument.activeElement
+    const focused =
+      active instanceof HTMLElement && this.view.contains(active)
+        ? active
+        : null
     this.commentList.update(this.store.getComments())
     const target = this.store.getReplyTarget()
-    if (target) {
-      const section = this.findSection(target.id)
-      if (section) section.append(this.editorContainer)
-      else this.handleCancelReply()
-    }
-    focused?.focus({ preventScroll: true })
+    if (target && !this.commentList.replySlot(target.id))
+      this.handleCancelReply()
+    else
+      this.placeEditor(
+        target ? this.commentList.replySlot(target.id)! : this.editorHome.value!
+      )
+    // Keyed list reordering can move an ancestor of the focused element.
+    if (
+      focused?.isConnected &&
+      focused !== this.container.ownerDocument.activeElement
+    )
+      focused.focus({ preventScroll: true })
   }
 
-  private findSection(id: string): HTMLElement | undefined {
-    // Comment IDs need not be valid CSS identifiers.
-    return (
-      Array.from(this.container.querySelectorAll<HTMLElement>('.vcard'))
-        .find(element => element.id === id)
-        ?.querySelector<HTMLElement>(':scope > section') || undefined
-    )
+  private placeEditor(slot: HTMLElement) {
+    if (this.editorContainer.parentElement !== slot)
+      slot.append(this.editorContainer)
   }
 
   private handleReply(id: string, nick: string) {
     if (this.submitting || this.destroyed) return
-    const section = this.findSection(id)
-    if (!section) return
+    const slot = this.commentList.replySlot(id)
+    if (!slot) return
     this.store.setReplyTarget({ id, nick })
-    section.append(this.editorContainer)
-    const input =
-      this.editorContainer.querySelector<HTMLTextAreaElement>('.veditor')!
-    input.placeholder = `回复 @${nick}`
-    input.focus()
-    this.editorContainer.querySelector('.vcancel-reply')!.classList.remove('dn')
+    this.placeEditor(slot)
+    this.editor.setReply(nick)
+    this.editor.focus()
   }
 
   private handleCancelReply() {
     this.store.setReplyTarget(null)
-    this.container.prepend(this.editorContainer)
-    this.editorContainer.querySelector<HTMLTextAreaElement>(
-      '.veditor'
-    )!.placeholder = this.options.placeholder
-    this.editorContainer.querySelector('.vcancel-reply')!.classList.add('dn')
+    this.placeEditor(this.editorHome.value!)
+    this.editor.setReply(null)
   }
 
   private async handleLike(id: string) {
@@ -270,16 +256,66 @@ export class Hitalk {
     }
   }
 
+  private renderShell() {
+    if (this.destroyed) return
+    render(
+      html`
+        <div ${ref(this.editorHome)} class="editor-home"></div>
+        <div class="info">
+          <div class="count">
+            ${this.total === null ? '' : `评论(${this.total})`}
+          </div>
+        </div>
+        <div class="hitalk-status" role="status" aria-live="polite">
+          ${this.message}
+        </div>
+        <button
+          type="button"
+          class="vbtn hitalk-retry"
+          ?hidden=${!this.retry}
+          @click=${() => {
+            void this.refresh()
+          }}
+        >
+          重新加载
+        </button>
+        <div class="loading-container">
+          <div class="vloading${this.pending ? '' : ' dn'}">
+            <div class="spinner">
+              <div class="r1"></div>
+              <div class="r2"></div>
+              <div class="r3"></div>
+              <div class="r4"></div>
+              <div class="r5"></div>
+            </div>
+          </div>
+        </div>
+        <div ${ref(this.listContainer)} class="comment-list-container"></div>
+        <button
+          type="button"
+          class="vbtn hitalk-more"
+          ?hidden=${!this.hasMore}
+          ?disabled=${this.loadingPage || this.submitting}
+          @click=${() => {
+            if (!this.loadingPage && !this.submitting)
+              void this.loadComments(this.page + 1)
+          }}
+        >
+          加载更多
+        </button>
+      `,
+      this.view
+    )
+  }
+
   private busy(delta: number) {
     this.pending = Math.max(0, this.pending + delta)
-    if (!this.destroyed) {
-      if (this.pending) this.loading.show()
-      else this.loading.hide()
-    }
+    this.renderShell()
   }
+
   private showMessage(message: string) {
-    const status = this.container.querySelector('.hitalk-status')
-    if (status) status.textContent = message
+    this.message = message
+    this.renderShell()
   }
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : '请稍后重试'
@@ -293,7 +329,9 @@ export class Hitalk {
     this.api.destroy()
     this.unsubscribe()
     this.editor.destroy()
-    this.container.replaceChildren()
+    this.commentList.destroy()
+    render(nothing, this.view).setConnected(false)
+    this.view.remove()
     this.container.classList.remove('Hitalk')
     instances.delete(this.container)
   }
