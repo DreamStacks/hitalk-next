@@ -1,26 +1,48 @@
 {
   "name": "hitalk-next",
   "version": "0.1.0",
-  "description": "一款快速、简洁且高效的无后端评论系统",
+  "private": true,
+  "description": "可自托管的轻量评论系统",
   "keywords": [],
   "license": "MIT",
   "author": "ihoey <mail@ihoey.com> (https://blog.ihoey.com/)",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "lint:fix": "oxlint --type-aware --fix",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "typecheck": "pnpm --filter @hitalk/server typecheck && pnpm --filter @hitalk/sdk typecheck",
+    "build": "pnpm --filter @hitalk/sdk build",
+    "test": "pnpm build && vitest run",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:coverage",
+    "db:verify-backup": "node scripts/verify-backup.mjs",
+    "test:worker": "node scripts/check-worker.mjs",
+    "test:watch": "pnpm build && vitest",
+    "test:coverage": "pnpm build && vitest run --coverage"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.11",
+    "@types/node": "^22.20.3",
+    "@vitest/coverage-istanbul": "4.1.11",
+    "husky": "^9.1.7",
+    "jsdom": "^30.1.0",
+    "jsonc-parser": "^3.3.1",
+    "lint-staged": "^17.5.1",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "4.1.11"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": "pnpm run lint",
     "*": "oxfmt --no-error-on-unmatched-pattern"
   },
-  "devDependencies": {
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "oxfmt": "^0.26.0",
-    "oxlint": "^1.41.0"
-  }
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@10.28.2"
 }

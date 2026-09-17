@@ -1,391 +1,251 @@
-/**
- * 数据库操作封装
- */
+import type { Comment, CommentCreateRequest } from '@hitalk/shared'
+import type { CommentRow, Page } from '../types'
+import { avatarHash } from './avatar'
+import { renderMarkdown } from './markdown'
 
-import { nanoid } from 'nanoid'
-import type { Comment, Page } from '@hitalk/shared'
-
-// D1 types are provided by @cloudflare/workers-types
-// No need to redefine them here
-
-/**
- * 格式化 SQLite 时间字符串为 ISO 8601 UTC
- */
-function formatTimestamp(ts: string): string {
-  if (!ts) return ts
-  return ts.replace(' ', 'T') + 'Z'
+function timestamp(value: string): string {
+  return value.includes('T') ? value : value.replace(' ', 'T') + 'Z'
 }
 
-/**
- * 获取或创建 Page
- */
+/** Explicit allowlist: adding a database column must never change the public API. */
+export function publicComment(row: CommentRow): Comment {
+  let website: string | undefined
+  try {
+    const url = new URL(row.website || '')
+    if (
+      ['http:', 'https:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password
+    )
+      website = url.href
+  } catch {
+    /* Keep public URLs limited to web links. */
+  }
+  return {
+    id: row.id,
+    parent_id: row.parent_id,
+    nick: row.nick,
+    website,
+    avatar_hash: avatarHash(row.email || row.nick),
+    // Markdown is the only persisted content; rendering always uses current safety rules.
+    content_html: renderMarkdown(row.content_md),
+    like_count: row.like_count,
+    is_pinned: Boolean(row.is_pinned),
+    is_admin: Boolean(row.is_admin),
+    created_at: timestamp(row.created_at),
+    updated_at: timestamp(row.updated_at),
+  }
+}
+
+export function getPage(db: D1Database, path: string): Promise<Page | null> {
+  return db
+    .prepare('SELECT * FROM pages WHERE path = ?')
+    .bind(path)
+    .first<Page>()
+}
+
 export async function getOrCreatePage(
   db: D1Database,
   path: string,
   title?: string
 ): Promise<Page> {
-  // 先查询是否存在
-  const existing = await db
-    .prepare('SELECT * FROM pages WHERE path = ?')
-    .bind(path)
-    .first<Page>()
-
-  if (existing) {
-    // 格式化时间
-    existing.created_at = formatTimestamp(existing.created_at)
-    existing.updated_at = formatTimestamp(existing.updated_at)
-
-    // 更新 title (如果提供)
-    if (title && title !== existing.title) {
-      await db
-        .prepare(
-          'UPDATE pages SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-        )
-        .bind(title, existing.id)
-        .run()
-      existing.title = title
-    }
-    return existing
-  }
-
-  // 创建新 page
-  const result = await db
-    .prepare('INSERT INTO pages (path, title) VALUES (?, ?) RETURNING *')
+  const page = await db
+    .prepare(`INSERT INTO pages (path, title) VALUES (?, ?)
+    ON CONFLICT(path) DO UPDATE SET title = COALESCE(pages.title, excluded.title)
+    RETURNING *`)
     .bind(path, title || null)
     .first<Page>()
-
-  if (result) {
-    result.created_at = formatTimestamp(result.created_at)
-    result.updated_at = formatTimestamp(result.updated_at)
-  }
-
-  return result!
+  if (!page) throw new Error('Page creation failed')
+  return page
 }
 
-/**
- * 创建评论
- */
 export async function createComment(
   db: D1Database,
-  data: {
-    page_id: number
-    parent_id?: string
-    nick: string
-    email?: string
-    website?: string
-    content_md: string
-    content_html: string
-    ua?: string
-    ip_hash?: string
-    is_admin?: boolean
-  }
-): Promise<Comment> {
-  const id = nanoid()
-
-  const comment = await db
-    .prepare(
-      `INSERT INTO comments (
-        id, page_id, parent_id, nick, email, website,
-        content_md, content_html, ua, ip_hash, is_admin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      RETURNING *`
-    )
+  pageId: number,
+  input: CommentCreateRequest,
+  isAdmin: boolean
+): Promise<CommentRow> {
+  const row = await db
+    .prepare(`INSERT INTO comments (
+    id, page_id, parent_id, nick, email, website, content_md, is_admin
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
     .bind(
-      id,
-      data.page_id,
-      data.parent_id || null,
-      data.nick,
-      data.email || null,
-      data.website || null,
-      data.content_md,
-      data.content_html,
-      data.ua || null,
-      data.ip_hash || null,
-      data.is_admin ? 1 : 0
+      crypto.randomUUID(),
+      pageId,
+      input.parent_id || null,
+      input.nick,
+      input.email || null,
+      input.website || null,
+      input.content,
+      isAdmin ? 1 : 0
     )
-    .first<Comment>()
-
-  // 更新 page 的评论计数
-  await db
-    .prepare(
-      'UPDATE pages SET comment_count = comment_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    )
-    .bind(data.page_id)
-    .run()
-
-  if (comment) {
-    comment.created_at = formatTimestamp(comment.created_at)
-    comment.updated_at = formatTimestamp(comment.updated_at)
-  }
-
-  return comment!
+    .first<CommentRow>()
+  if (!row) throw new Error('Comment creation failed')
+  return row
 }
 
-/**
- * 根据 ID 获取单条评论
- */
-export async function getCommentById(
+export function getCommentById(
   db: D1Database,
   id: string
-): Promise<Comment | null> {
-  const comment = await db
+): Promise<CommentRow | null> {
+  return db
     .prepare('SELECT * FROM comments WHERE id = ?')
     .bind(id)
-    .first<Comment>()
-
-  if (comment) {
-    comment.created_at = formatTimestamp(comment.created_at)
-    comment.updated_at = formatTimestamp(comment.updated_at)
-  }
-
-  return comment
+    .first<CommentRow>()
 }
 
-/**
- * 获取评论列表(按页面)
- */
+/** Page by roots, returning each selected root's complete reply tree. */
 export async function getComments(
   db: D1Database,
-  page_id: number
+  pageId: number,
+  limit: number,
+  offset: number
 ): Promise<Comment[]> {
   const result = await db
-    .prepare(
-      'SELECT * FROM comments WHERE page_id = ? ORDER BY is_pinned DESC, created_at DESC'
-    )
-    .bind(page_id)
-    .all<Comment>()
-
-  return result.results.map(c => ({
-    ...c,
-    created_at: formatTimestamp(c.created_at),
-    updated_at: formatTimestamp(c.updated_at),
-  }))
+    .prepare(`WITH RECURSIVE roots AS (
+    SELECT * FROM comments WHERE page_id = ? AND parent_id IS NULL
+    ORDER BY is_pinned DESC, created_at DESC, id DESC LIMIT ? OFFSET ?
+  ), thread AS (
+    SELECT * FROM roots
+    UNION ALL
+    SELECT c.* FROM comments c JOIN thread t ON c.parent_id = t.id WHERE c.page_id = ?
+  ) SELECT * FROM thread ORDER BY is_pinned DESC, created_at DESC, id DESC`)
+    .bind(pageId, limit, offset, pageId)
+    .all<CommentRow>()
+  return buildCommentTree(result.results.map(publicComment))
 }
 
-/**
- * 获取所有评论(管理员用)
- */
-export async function getAllComments(
+export async function rootCount(
   db: D1Database,
-  limit: number = 50,
-  offset: number = 0
-): Promise<Comment[]> {
-  const result = await db
+  pageId: number
+): Promise<number> {
+  const row = await db
     .prepare(
-      `SELECT c.*, p.path as page_path
-       FROM comments c
-       JOIN pages p ON c.page_id = p.id
-       ORDER BY c.created_at DESC
-       LIMIT ? OFFSET ?`
+      'SELECT COUNT(*) AS total FROM comments WHERE page_id = ? AND parent_id IS NULL'
     )
-    .bind(limit, offset)
-    .all<Comment & { page_path: string }>()
+    .bind(pageId)
+    .first<{ total: number }>()
+  return row?.total || 0
+}
 
-  return result.results.map(c => ({
-    ...c,
-    created_at: formatTimestamp(c.created_at),
-    updated_at: formatTimestamp(c.updated_at),
+export async function getAllComments(db: D1Database, limit = 50, offset = 0) {
+  const result = await db
+    .prepare(`SELECT c.*, p.path AS page_path FROM comments c
+    JOIN pages p ON c.page_id = p.id ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`)
+    .bind(limit, offset)
+    .all<CommentRow & { page_path: string }>()
+  return result.results.map(row => ({
+    ...row,
+    created_at: timestamp(row.created_at),
   }))
 }
 
-/**
- * 构建评论 tree (两级扁平化结构)
- * 所有深层嵌套的回复都会被平铺在根评论的 children 中
- */
 export function buildCommentTree(comments: Comment[]): Comment[] {
-  const commentMap = new Map<string, Comment>()
-  const rootComments: Comment[] = []
-
-  // 1. 初始化所有评论，并按 ID 索引
-  comments.forEach(comment => {
-    commentMap.set(comment.id, { ...comment, children: [] })
-  })
-
-  // 2. 第一遍：找根评论
-  comments.forEach(comment => {
-    if (!comment.parent_id) {
-      rootComments.push(commentMap.get(comment.id)!)
+  const map = new Map(
+    comments.map(comment => [
+      comment.id,
+      { ...comment, children: [] as Comment[] },
+    ])
+  )
+  const roots: Comment[] = []
+  for (const comment of comments) {
+    const node = map.get(comment.id)!
+    let parent = node
+    const seen = new Set([node.id])
+    while (parent.parent_id) {
+      const next = map.get(parent.parent_id)
+      if (!next || seen.has(next.id)) break
+      seen.add(next.id)
+      parent = next
     }
-  })
-
-  // 3. 第二遍：将所有回复分配给其所属的根评论
-  comments.forEach(comment => {
-    if (comment.parent_id) {
-      // 溯源：找到这笔评论所属的根评论
-      let currentParentId = comment.parent_id
-      let root: Comment | undefined
-
-      while (currentParentId) {
-        const parent = commentMap.get(currentParentId)
-        if (!parent) break
-        if (!parent.parent_id) {
-          root = parent
-          break
-        }
-        currentParentId = parent.parent_id
-      }
-
-      if (root) {
-        root.children = root.children || []
-        root.children.push(commentMap.get(comment.id)!)
-      } else {
-        // 如果找不到根(理论上不应该发生)，则作为根评论
-        rootComments.push(commentMap.get(comment.id)!)
-      }
-    }
-  })
-
-  // 4. 对 children 按时间升序排序(回复通常按时间正序排列)
-  rootComments.forEach(root => {
-    if (root.children) {
-      root.children.sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
-    }
-  })
-
-  return rootComments
+    if (parent !== node && !parent.parent_id) parent.children.push(node)
+    else roots.push(node)
+  }
+  for (const root of roots) {
+    root.children?.sort(
+      (a, b) =>
+        a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+    )
+  }
+  return roots
 }
 
-/**
- * 点赞
- */
 export async function likeComment(
   db: D1Database,
-  comment_id: string,
-  ip_hash: string
-): Promise<{ success: boolean; like_count: number }> {
-  try {
-    const existing = await db
-      .prepare(
-        'SELECT * FROM comment_likes WHERE comment_id = ? AND ip_hash = ?'
-      )
-      .bind(comment_id, ip_hash)
-      .first()
-
-    if (existing) {
-      const comment = await db
-        .prepare('SELECT like_count FROM comments WHERE id = ?')
-        .bind(comment_id)
-        .first<{ like_count: number }>()
-
-      return {
-        success: false,
-        like_count: comment?.like_count || 0,
-      }
-    }
-
-    await db
-      .prepare('INSERT INTO comment_likes (comment_id, ip_hash) VALUES (?, ?)')
-      .bind(comment_id, ip_hash)
-      .run()
-
-    await db
-      .prepare('UPDATE comments SET like_count = like_count + 1 WHERE id = ?')
-      .bind(comment_id)
-      .run()
-
-    const comment = await db
-      .prepare('SELECT like_count FROM comments WHERE id = ?')
-      .bind(comment_id)
-      .first<{ like_count: number }>()
-
-    return {
-      success: true,
-      like_count: comment?.like_count || 0,
-    }
-  } catch {
-    throw new Error('点赞失败')
-  }
+  commentId: string,
+  ipHash: string
+) {
+  // Unique constraint makes repeated/concurrent likes idempotent; the trigger owns the count.
+  const results = await db.batch([
+    db
+      .prepare(`INSERT INTO comment_likes (comment_id, ip_hash)
+      SELECT id, ? FROM comments WHERE id = ? ON CONFLICT(comment_id, ip_hash) DO NOTHING`)
+      .bind(ipHash, commentId),
+    db.prepare('SELECT like_count FROM comments WHERE id = ?').bind(commentId),
+  ])
+  const comment = results[1].results[0] as { like_count: number } | undefined
+  return comment
+    ? { success: results[0].meta.changes > 0, like_count: comment.like_count }
+    : null
 }
 
-/**
- * 批量获取评论数
- */
 export async function getCommentCounts(
   db: D1Database,
   paths: string[]
 ): Promise<Record<string, number>> {
-  const placeholders = paths.map(() => '?').join(',')
-  const result = await db
+  const rows = await db
     .prepare(
-      `SELECT path, comment_count FROM pages WHERE path IN (${placeholders})`
+      `SELECT path, comment_count FROM pages WHERE path IN (${paths.map(() => '?').join(',')})`
     )
     .bind(...paths)
     .all<{ path: string; comment_count: number }>()
-
-  const counts: Record<string, number> = {}
-  paths.forEach(path => {
-    counts[path] = 0
-  })
-
-  result.results.forEach(row => {
-    counts[row.path] = row.comment_count
-  })
-
-  return counts
+  return Object.fromEntries(
+    paths.map(path => [
+      path,
+      rows.results.find(row => row.path === path)?.comment_count || 0,
+    ])
+  )
 }
 
-/**
- * 删除评论
- */
 export async function deleteComment(
   db: D1Database,
   id: string
-): Promise<{ success: boolean }> {
-  // 先获取评论信息以更新 page_id 计数
-  const comment = await db
-    .prepare('SELECT page_id FROM comments WHERE id = ?')
+): Promise<boolean> {
+  const result = await db
+    .prepare('DELETE FROM comments WHERE id = ?')
     .bind(id)
-    .first<{ page_id: number }>()
-
-  if (!comment) {
-    return { success: false }
-  }
-
-  // 删除评论 (级联删除会自动处理子评论和点赞记录)
-  await db.prepare('DELETE FROM comments WHERE id = ?').bind(id).run()
-
-  // 更新 page 的评论计数 (仅减少一条，如果是批量删除子评论，这里逻辑可能需要优化)
-  // 但目前这种删除单条的方式是符合预期的
-  await db
-    .prepare(
-      'UPDATE pages SET comment_count = MAX(0, comment_count - 1), updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    )
-    .bind(comment.page_id)
     .run()
-
-  return { success: true }
+  return result.meta.changes > 0
 }
 
-/**
- * 置顶/取消置顶评论
- */
 export async function pinComment(
   db: D1Database,
   id: string,
-  is_pinned: boolean
-): Promise<{ success: boolean; is_pinned: boolean }> {
-  await db
+  pinned: boolean
+): Promise<boolean> {
+  const result = await db
     .prepare(
       'UPDATE comments SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     )
-    .bind(is_pinned ? 1 : 0, id)
+    .bind(pinned ? 1 : 0, id)
     .run()
-
-  return { success: true, is_pinned }
+  return result.meta.changes > 0
 }
 
-/**
- * 生成 IP Hash
- */
-export function hashIP(ip: string): string {
-  let hash = 0
-  for (let i = 0; i < ip.length; i++) {
-    const char = ip.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash
-  }
-  return Math.abs(hash).toString(36)
+export async function hashIP(ip: string, salt: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(salt),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const hash = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(ip)
+  )
+  return Array.from(new Uint8Array(hash), byte =>
+    byte.toString(16).padStart(2, '0')
+  ).join('')
 }

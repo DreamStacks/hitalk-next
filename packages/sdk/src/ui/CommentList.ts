@@ -25,12 +25,7 @@ export class CommentList {
   }
 
   render(comments: Comment[]) {
-    this.container.innerHTML = renderCommentList(
-      comments,
-      this.avatarType,
-      this.onReply,
-      this.onLike
-    )
+    this.container.innerHTML = renderCommentList(comments, this.avatarType)
 
     // 绑定事件
     bindCommentEvents(this.container, this.onReply, this.onLike)

@@ -9,20 +9,16 @@ import { getGravatarUrl, timeAgo, HtmlUtil, getLink } from '../utils'
  * 渲染单条评论
  * @param comment - 评论数据
  * @param avatarType - 头像类型
- * @param onReply - 回复回调函数 (用于递归渲染子评论)
- * @param onLike - 点赞回调函数 (用于递归渲染子评论)
  */
 export function renderComment(
   comment: Comment,
   avatarType: string,
-  onReply: (id: string, nick: string) => void,
-  onLike: (id: string) => void,
   isChild: boolean = false
 ): string {
   const avatar =
     avatarType === 'hide'
       ? ''
-      : `<img class="vimg" src="${getGravatarUrl(comment.email || comment.nick, avatarType)}" alt="${comment.nick}" />`
+      : `<img class="vimg" src="${getGravatarUrl(comment.avatar_hash, avatarType)}" alt="${HtmlUtil.encode(comment.nick)}" />`
 
   const isPinned = comment.is_pinned ? '<span class="vpin">置顶</span>' : ''
 
@@ -30,7 +26,7 @@ export function renderComment(
   let childrenSection = ''
   if (!isChild && comment.children && comment.children.length > 0) {
     const childrenHtml = comment.children
-      .map(child => renderComment(child, avatarType, onReply, onLike, true))
+      .map(child => renderComment(child, avatarType, true))
       .join('')
     childrenSection = `
       <div class="vchildren">
@@ -42,11 +38,11 @@ export function renderComment(
   }
 
   return `
-    <li class="vcard" id="${comment.id}">
+    <li class="vcard" id="${HtmlUtil.encode(comment.id)}">
       ${avatar}
       <section>
         <div class="vhead">
-          <a rel="nofollow" href="${getLink({ link: comment.website, mail: comment.email })}" target="_blank">
+          <a rel="nofollow noopener noreferrer" href="${HtmlUtil.encode(getLink(comment.website))}" target="_blank">
             ${HtmlUtil.encode(comment.nick)}
           </a>
           ${isPinned}
@@ -54,11 +50,11 @@ export function renderComment(
         </div>
         <div class="vcontent">${comment.content_html}</div>
         <div class="vfooter">
-          <span class="vlike" data-id="${comment.id}">
+          <span class="vlike" data-id="${HtmlUtil.encode(comment.id)}">
             <i class="vlike-icon">❤</i>
             <span class="vlike-count">${comment.like_count || ''}</span>
           </span>
-          <span class="vat" data-id="${comment.id}" data-nick="${comment.nick}">回复</span>
+          <span class="vat" data-id="${HtmlUtil.encode(comment.id)}" data-nick="${HtmlUtil.encode(comment.nick)}">回复</span>
         </div>
         ${childrenSection}
       </section>
@@ -71,9 +67,7 @@ export function renderComment(
  */
 export function renderCommentList(
   comments: Comment[],
-  avatarType: string,
-  onReply: (id: string, nick: string) => void,
-  onLike: (id: string) => void
+  avatarType: string
 ): string {
   if (comments.length === 0) {
     return '<div class="vempty">还没有评论哦，快来抢沙发吧!</div>'
@@ -81,7 +75,7 @@ export function renderCommentList(
 
   return `
     <ul class="vlist">
-      ${comments.map(comment => renderComment(comment, avatarType, onReply, onLike)).join('')}
+      ${comments.map(comment => renderComment(comment, avatarType)).join('')}
     </ul>
   `
 }

@@ -1,339 +1,304 @@
-/**
- * Hitalk v2 SDK 主入口
- */
-
 import type { HitalkOptions } from '@hitalk/shared'
 import { HitalkAPI } from './api'
 import { Store } from './store'
-import { Editor } from './ui/Editor'
+import { Editor, type EditorData } from './ui/Editor'
 import { Loading } from './ui/Loading'
 import { CommentList } from './ui/CommentList'
 import { check } from './utils'
 import './styles.css'
 
+export type {
+  HitalkOptions,
+  Comment,
+  CommentCreateRequest,
+  CommentListResponse,
+} from '@hitalk/shared'
+const instances = new WeakMap<HTMLElement, Hitalk>()
+
 export class Hitalk {
   private api: HitalkAPI
-  private store: Store
+  private store = new Store()
   private container: HTMLElement
-  private editor: Editor | null = null
-  private editorContainer: HTMLElement | null = null
-  private loading: Loading | null = null
-  private commentList: CommentList | null = null
+  private editor: Editor
+  private editorContainer: HTMLElement
+  private loading: Loading
+  private commentList: CommentList
   private options: Required<HitalkOptions>
+  private unsubscribe: () => void
+  private destroyed = false
+  private submitting = false
+  private liking = new Set<string>()
+  private loadSequence = 0
+  private loadingPage = false
+  private pending = 0
+  private page = 1
+  private likeRevision = 0
+  private likeUpdates = new Map<string, { revision: number; count: number }>()
 
   constructor(selector: string | HTMLElement, options: HitalkOptions) {
-    // 获取容器元素
     const el =
       typeof selector === 'string' ? document.querySelector(selector) : selector
-
-    if (!el || !(el instanceof HTMLElement)) {
+    if (!(el instanceof HTMLElement))
       throw new Error('Hitalk: 无法找到指定的容器元素')
-    }
-
+    if (!options.server) throw new Error('Hitalk: 缺少 server 配置')
+    const pageSize = options.pageSize ?? 10
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50)
+      throw new Error('Hitalk: pageSize 必须为 1–50 的整数')
+    instances.get(el)?.destroy()
     this.container = el
-    this.container.classList.add('Hitalk')
-
-    // 合并配置
     this.options = {
       server: options.server,
       path: options.path || location.pathname.replace(/index\.(html|htm)$/, ''),
       title: options.title || document.title,
       placeholder: options.placeholder || '说点什么吧...',
       avatar: options.avatar || 'mm',
-      pageSize: options.pageSize || 10,
+      pageSize,
     }
-
-    // 初始化
     this.api = new HitalkAPI(this.options.server)
-    this.store = new Store()
-
-    // 渲染UI
-    this.render()
-
-    // 加载评论
-    this.loadComments()
-
-    // 订阅状态变化
-    this.store.subscribe(() => {
-      this.updateUI()
-    })
-  }
-
-  /**
-   * 渲染初始 UI
-   */
-  private render() {
-    // 创建基本容器结构
-    this.container.innerHTML = `
-      <div class="editor-container"></div>
-      <div class="info">
-        <div class="count"></div>
-      </div>
-      <div class="loading-container"></div>
-      <div class="comment-list-container"></div>
-    `
-
-    // 初始化 Editor 组件
-    this.editorContainer = this.container.querySelector(
-      '.editor-container'
-    ) as HTMLElement
-    if (this.editorContainer) {
-      this.editor = new Editor(
-        this.editorContainer,
-        this.store.getUserInfo(),
-        this.options.placeholder,
-        data => this.handleSubmit(data),
-        () => this.handleCancelReply()
-      )
-    }
-
-    // 初始化 Loading 组件
-    const loadingContainer = this.container.querySelector(
-      '.loading-container'
-    ) as HTMLElement
-    if (loadingContainer) {
-      this.loading = new Loading(loadingContainer)
-    }
-
-    // 初始化 CommentList 组件
-    const commentListContainer = this.container.querySelector(
-      '.comment-list-container'
-    ) as HTMLElement
-    if (commentListContainer) {
-      this.commentList = new CommentList(
-        commentListContainer,
-        this.options.avatar,
-        (id, nick) => this.handleReply(id, nick),
-        id => this.handleLike(id)
-      )
-    }
-  }
-
-  /**
-   * 加载评论
-   */
-  private async loadComments() {
-    this.showLoading(true)
-
-    try {
-      const response = await this.api.fetchComments(this.options.path)
-      this.store.setComments(response.comments)
-
-      // 更新评论数
-      const countEl = this.container.querySelector('.count')
-      if (countEl) {
-        countEl.innerHTML = `评论(<span class="num">${response.total}</span>)`
+    el.classList.add('Hitalk')
+    el.innerHTML = `<div class="editor-container"></div>
+      <div class="info"><div class="count"></div></div>
+      <div class="hitalk-status" role="status" aria-live="polite"></div>
+      <button type="button" class="vbtn hitalk-retry" hidden>重新加载</button>
+      <div class="loading-container"></div><div class="comment-list-container"></div>
+      <button type="button" class="vbtn hitalk-more" hidden>加载更多</button>`
+    this.editorContainer = el.querySelector<HTMLElement>('.editor-container')!
+    this.editor = new Editor(
+      this.editorContainer,
+      this.store.getUserInfo(),
+      this.options.placeholder,
+      data => {
+        void this.handleSubmit(data)
+      },
+      () => this.handleCancelReply()
+    )
+    this.loading = new Loading(
+      el.querySelector<HTMLElement>('.loading-container')!
+    )
+    this.commentList = new CommentList(
+      el.querySelector<HTMLElement>('.comment-list-container')!,
+      this.options.avatar,
+      (id, nick) => this.handleReply(id, nick),
+      id => {
+        void this.handleLike(id)
       }
+    )
+    this.unsubscribe = this.store.subscribe(() => this.updateUI())
+    el.querySelector('.hitalk-retry')!.addEventListener('click', () => {
+      void this.refresh()
+    })
+    el.querySelector('.hitalk-more')!.addEventListener('click', () => {
+      if (!this.loadingPage && !this.submitting)
+        void this.loadComments(this.page + 1)
+    })
+    instances.set(el, this)
+    void this.refresh()
+  }
+
+  /** Reload the first page without replacing the editor or its draft. */
+  async refresh(): Promise<void> {
+    if (!this.destroyed) await this.loadComments(1)
+  }
+
+  private async loadComments(page: number) {
+    const sequence = ++this.loadSequence
+    const likeRevision = this.likeRevision
+    this.loadingPage = true
+    this.busy(1)
+    this.showMessage('')
+    const more =
+      this.container.querySelector<HTMLButtonElement>('.hitalk-more')!
+    more.disabled = true
+    this.container.querySelector<HTMLButtonElement>('.hitalk-retry')!.hidden =
+      true
+    try {
+      const result = await this.api.fetchComments(
+        this.options.path,
+        page,
+        this.options.pageSize
+      )
+      if (this.destroyed || sequence !== this.loadSequence) return
+      const mergeLikes = (
+        comments: typeof result.comments
+      ): typeof result.comments =>
+        comments.map(comment => {
+          const update = this.likeUpdates.get(comment.id)
+          return {
+            ...comment,
+            like_count:
+              update && update.revision > likeRevision
+                ? Math.max(comment.like_count, update.count)
+                : comment.like_count,
+            children: comment.children
+              ? mergeLikes(comment.children)
+              : undefined,
+          }
+        })
+      const received = mergeLikes(result.comments)
+      const comments =
+        page === 1 ? received : [...this.store.getComments(), ...received]
+      this.store.setComments([
+        ...new Map(comments.map(comment => [comment.id, comment])).values(),
+      ])
+      this.page = page
+      this.container.querySelector('.count')!.textContent =
+        `评论(${result.total})`
+      more.hidden = !result.pagination.has_more
     } catch (error) {
-      console.error('加载评论失败:', error)
+      if (!this.destroyed && sequence === this.loadSequence) {
+        this.showMessage(`加载失败：${this.errorMessage(error)}`)
+        this.container.querySelector<HTMLButtonElement>(
+          '.hitalk-retry'
+        )!.hidden = false
+      }
     } finally {
-      this.showLoading(false)
+      this.busy(-1)
+      if (!this.destroyed && sequence === this.loadSequence) {
+        this.loadingPage = false
+        more.disabled = false
+      }
     }
   }
 
-  /**
-   * 处理提交
-   */
-  private async handleSubmit(data: {
-    nick: string
-    email: string
-    website: string
-    content: string
-  }) {
-    const { nick: inputNick, email, website, content } = data
-    const nick = inputNick || 'Guest'
-
-    // 验证
-    if (!content) {
-      this.showAlert('好歹也写点文字嘛 ヾ(๑╹◡╹)ﾉ"', false)
-      return
-    }
-
-    const emailCheck = check.mail(email)
-    const websiteCheck = check.link(website)
-
-    if (email && !emailCheck.k) {
-      this.showAlert('您的邮箱格式不正确', false)
-      return
-    }
-
-    if (website && !websiteCheck.k) {
-      this.showAlert('您的网址格式不正确', false)
-      return
-    }
-
-    // 提交
-    this.showLoading(true)
-
+  private async handleSubmit(data: EditorData) {
+    if (this.destroyed || this.submitting) return
+    const nick = data.nick || 'Guest'
+    if (!data.content) return this.showMessage('请先填写评论内容')
+    if (data.email && !check.mail(data.email).k)
+      return this.showMessage('您的邮箱格式不正确')
+    if (data.website && !check.link(data.website).k)
+      return this.showMessage('您的网址格式不正确')
+    this.submitting = true
+    this.editor.setSubmitting(true)
+    this.busy(1)
+    this.showMessage('')
     try {
-      const replyTarget = this.store.getReplyTarget()
-
-      const comment = await this.api.createComment({
+      const target = this.store.getReplyTarget()
+      await this.api.createComment({
         path: this.options.path,
         title: this.options.title,
         nick,
-        email: email || undefined,
-        website: website || undefined,
-        content: replyTarget ? `@${replyTarget.nick} ${content}` : content,
-        parent_id: replyTarget?.id,
+        email: data.email || undefined,
+        website: data.website || undefined,
+        content: data.content,
+        parent_id: target?.id,
       })
-
-      // 先移动回顶部，防止 store 更新触发 updateUI 导致编辑器所在的 DOM 节点被销毁
+      if (this.destroyed) return
       this.handleCancelReply()
-
-      // 保存用户信息
-      if (nick !== 'Guest') {
-        this.store.setUserInfo({ nick, email, website })
-      }
-
-      // 清空表单
-      this.editor?.clear()
-
-      // 添加到列表
-      this.store.addComment(comment)
-
-      // 重新加载评论(刷新树结构)
-      await this.loadComments()
-    } catch (error: any) {
-      console.error('提交评论失败:', error)
-      this.showAlert(`提交失败: ${error.message}`, false)
+      if (nick !== 'Guest')
+        this.store.setUserInfo({
+          nick,
+          email: data.email,
+          website: data.website,
+        })
+      this.editor.clear()
+      await this.refresh()
+    } catch (error) {
+      if (!this.destroyed)
+        this.showMessage(`提交失败：${this.errorMessage(error)}`)
     } finally {
-      this.showLoading(false)
+      this.submitting = false
+      this.busy(-1)
+      if (!this.destroyed) this.editor.setSubmitting(false)
     }
   }
 
-  /**
-   * 更新 UI
-   */
+  /** Move the live editor outside the list before replacing list nodes, then restore it. */
   private updateUI() {
-    const comments = this.store.getComments()
-
-    // 使用 CommentList 组件更新评论列表
-    this.commentList?.update(comments)
-  }
-
-  /**
-   * 处理回复
-   */
-  private handleReply(id: string, nick: string) {
-    this.store.setReplyTarget({ id, nick })
-
-    // 找到当前点击的评论
-    const commentEl = this.container.querySelector(`.vcard#${id} > section`)
-    if (commentEl && this.editorContainer) {
-      // 移动编辑器到评论下方
-      commentEl.appendChild(this.editorContainer)
-
-      // 修改 placeholder 并聚焦
-      const editorInput = this.editorContainer.querySelector(
-        '.veditor'
-      ) as HTMLTextAreaElement
-      if (editorInput) {
-        editorInput.placeholder = `回复 @${nick}`
-        editorInput.focus()
-      }
-
-      // 显示取消按钮
-      const cancelBtn = this.editorContainer.querySelector('.vcancel-reply')
-      cancelBtn?.classList.remove('dn')
+    const focused = this.editorContainer.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement)
+      : null
+    this.container.prepend(this.editorContainer)
+    this.commentList.update(this.store.getComments())
+    const target = this.store.getReplyTarget()
+    if (target) {
+      const section = this.findSection(target.id)
+      if (section) section.append(this.editorContainer)
+      else this.handleCancelReply()
     }
+    focused?.focus({ preventScroll: true })
   }
 
-  /**
-   * 取消回复，编辑器回到顶部
-   */
+  private findSection(id: string): HTMLElement | undefined {
+    // Comment IDs need not be valid CSS identifiers.
+    return (
+      Array.from(this.container.querySelectorAll<HTMLElement>('.vcard'))
+        .find(element => element.id === id)
+        ?.querySelector<HTMLElement>(':scope > section') || undefined
+    )
+  }
+
+  private handleReply(id: string, nick: string) {
+    if (this.submitting || this.destroyed) return
+    const section = this.findSection(id)
+    if (!section) return
+    this.store.setReplyTarget({ id, nick })
+    section.append(this.editorContainer)
+    const input =
+      this.editorContainer.querySelector<HTMLTextAreaElement>('.veditor')!
+    input.placeholder = `回复 @${nick}`
+    input.focus()
+    this.editorContainer.querySelector('.vcancel-reply')!.classList.remove('dn')
+  }
+
   private handleCancelReply() {
     this.store.setReplyTarget(null)
-
-    if (this.editorContainer) {
-      // 移动回顶部
-      const firstChild = this.container.firstChild
-      if (firstChild && firstChild !== this.editorContainer) {
-        this.container.insertBefore(this.editorContainer, firstChild)
-      } else if (!firstChild) {
-        this.container.appendChild(this.editorContainer)
-      }
-
-      // 重置 placeholder
-      const editorInput = this.editorContainer.querySelector(
-        '.veditor'
-      ) as HTMLTextAreaElement
-      if (editorInput) {
-        editorInput.placeholder = this.options.placeholder
-      }
-
-      // 隐藏取消按钮
-      const cancelBtn = this.editorContainer.querySelector('.vcancel-reply')
-      cancelBtn?.classList.add('dn')
-    }
+    this.container.prepend(this.editorContainer)
+    this.editorContainer.querySelector<HTMLTextAreaElement>(
+      '.veditor'
+    )!.placeholder = this.options.placeholder
+    this.editorContainer.querySelector('.vcancel-reply')!.classList.add('dn')
   }
 
-  /**
-   * 处理点赞
-   */
   private async handleLike(id: string) {
+    if (this.destroyed || this.liking.has(id)) return
+    this.liking.add(id)
     try {
       const result = await this.api.likeComment(id)
-
-      // 更新点赞数
-      const likeEl = this.container.querySelector(
-        `.vlike[data-id="${id}"] .vlike-count`
-      )
-      if (likeEl) {
-        likeEl.textContent =
-          result.like_count > 0 ? String(result.like_count) : ''
-      }
-
-      if (!result.success) {
-        this.showAlert('您已经点过赞了', false)
-      }
-    } catch (error: any) {
-      console.error('点赞失败:', error)
-      this.showAlert(`点赞失败: ${error.message}`, false)
-    }
-  }
-
-  /**
-   * 显示/隐藏加载
-   */
-  private showLoading(show: boolean) {
-    if (show) {
-      this.loading?.show()
-    } else {
-      this.loading?.hide()
-    }
-  }
-
-  /**
-   * 显示提示
-   */
-  private showAlert(message: string, _showConfirm: boolean) {
-    const mark = this.container.querySelector('.vmark')
-    if (!mark) return
-
-    mark.innerHTML = `
-      <div class="valert">
-        <div class="vtext">${message}</div>
-        <div class="vbtns">
-          <button class="vcancel vbtn">好的</button>
-        </div>
-      </div>
-    `
-
-    const cancelBtn = mark.querySelector('.vcancel')
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => {
-        mark.classList.add('dn')
+      if (this.destroyed) return
+      this.likeUpdates.set(id, {
+        revision: ++this.likeRevision,
+        count: result.like_count,
       })
+      this.store.setLikeCount(id, result.like_count)
+      if (!result.success) this.showMessage('您已经点过赞了')
+    } catch (error) {
+      if (!this.destroyed)
+        this.showMessage(`点赞失败：${this.errorMessage(error)}`)
+    } finally {
+      this.liking.delete(id)
     }
+  }
 
-    mark.classList.remove('dn')
+  private busy(delta: number) {
+    this.pending = Math.max(0, this.pending + delta)
+    if (!this.destroyed) {
+      if (this.pending) this.loading.show()
+      else this.loading.hide()
+    }
+  }
+  private showMessage(message: string) {
+    const status = this.container.querySelector('.hitalk-status')
+    if (status) status.textContent = message
+  }
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : '请稍后重试'
+  }
+
+  /** Release requests, subscriptions and document listeners before SPA navigation/remount. */
+  destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
+    this.loadSequence++
+    this.api.destroy()
+    this.unsubscribe()
+    this.editor.destroy()
+    this.container.replaceChildren()
+    this.container.classList.remove('Hitalk')
+    instances.delete(this.container)
   }
 }
 
-/**
- * 全局挂载函数
- */
 export function mount(
   selector: string | HTMLElement,
   options: HitalkOptions

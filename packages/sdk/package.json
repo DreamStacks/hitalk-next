@@ -5,23 +5,28 @@
     "dist"
   ],
   "type": "module",
-  "main": "dist/hitalk.js",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "dist/hitalk.esm.js",
   "module": "dist/hitalk.esm.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "rollup -c",
-    "dev": "rollup -c -w"
+  "types": "dist/hitalk.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/hitalk.d.ts",
+      "import": "./dist/hitalk.esm.js"
+    },
+    "./hitalk.css": "./dist/hitalk.css"
   },
-  "dependencies": {
-    "@hitalk/shared": "workspace:*"
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.2",
-    "@rollup/plugin-node-resolve": "^15.3.0",
-    "@rollup/plugin-typescript": "^12.1.2",
-    "rollup": "^4.31.0",
-    "rollup-plugin-postcss": "^4.0.2",
-    "tslib": "^2.8.1",
-    "typescript": "^5.7.3"
+    "@hitalk/shared": "workspace:*",
+    "@tsdown/css": "^0.23.0",
+    "lightningcss": "^1.33.0",
+    "tsdown": "^0.23.0"
   }
 }

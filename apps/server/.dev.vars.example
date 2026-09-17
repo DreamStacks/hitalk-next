@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local use. For production use wrangler secret put.
+ADMIN_TOKEN=replace-with-a-long-random-token
+IP_HASH_SALT=replace-with-a-different-long-random-secret
+# Optional email settings; omit RESEND_API_KEY to disable email.
+# RESEND_API_KEY=
+# ADMIN_EMAIL=you@example.com
+# EMAIL_NAME=My Blog
+# EMAIL_FROM=My Blog <comments@example.com>
+# SITE_URL=https://example.com

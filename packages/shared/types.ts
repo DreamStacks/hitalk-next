@@ -5,26 +5,14 @@
 
 // ============ 数据模型 ============
 
-export interface Page {
-  id: number
-  path: string
-  title?: string
-  comment_count: number
-  created_at: string
-  updated_at: string
-}
-
+/** Public response only. Database records and notification addresses stay on the server. */
 export interface Comment {
   id: string
-  page_id: number
   parent_id: string | null
   nick: string
-  email?: string
   website?: string
-  content_md: string
+  avatar_hash: string
   content_html: string
-  ua?: string
-  ip_hash?: string
   like_count: number
   is_pinned: boolean
   is_admin: boolean
@@ -43,7 +31,7 @@ export interface CommentCreateRequest {
   nick: string
   email?: string
   website?: string
-  content: string // Markdown 内容
+  content: string
   parent_id?: string
 }
 
@@ -51,6 +39,7 @@ export interface CommentCreateRequest {
 export interface CommentListResponse {
   comments: Comment[]
   total: number
+  pagination: { page: number; page_size: number; has_more: boolean }
   page_info: {
     path: string
     title?: string
@@ -89,7 +78,7 @@ export interface HitalkOptions {
   title?: string // 页面标题
   placeholder?: string // 编辑器占位文本
   avatar?: 'mm' | 'identicon' | 'monsterid' | 'wavatar' | 'retro' | 'hide'
-  pageSize?: number // 分页大小,默认 10
+  pageSize?: number // 每页根评论数，默认 10，最大 50；回复随根评论返回
 }
 
 // ============ 工具类型 ============
@@ -98,49 +87,4 @@ export interface UserInfo {
   nick: string
   email: string
   website: string
-}
-
-// ============ 插件系统类型 ============
-
-/**
- * 插件钩子上下文
- */
-export interface PluginContext {
-  env: any // 环境变量
-  db: any // 数据库实例
-}
-
-/**
- * 插件钩子定义
- */
-export interface PluginHooks {
-  /**
-   * 评论创建后触发
-   * @param comment 新创建的评论
-   * @param page 评论所在页面
-   * @param parent 父级评论(如果有)
-   */
-  onCommentCreated?: (
-    ctx: PluginContext,
-    comment: Comment,
-    page: Page,
-    parent?: Comment
-  ) => Promise<void> | void
-
-  /**
-   * 评论被点赞后触发
-   */
-  onCommentLiked?: (
-    ctx: PluginContext,
-    comment: Comment,
-    likeCount: number
-  ) => Promise<void> | void
-}
-
-/**
- * 插件基础接口
- */
-export interface HitalkPlugin extends PluginHooks {
-  name: string
-  version?: string
 }

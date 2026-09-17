@@ -6,20 +6,20 @@ import type { UserInfo } from '@hitalk/shared'
 import { HtmlUtil } from '../utils'
 import { renderEmojiPicker } from '../renderer'
 
+export interface EditorData extends UserInfo {
+  content: string
+}
+
 export class Editor {
   private container: HTMLElement
-  private onSubmit: (data: {
-    nick: string
-    email: string
-    website: string
-    content: string
-  }) => void
+  private onSubmit: (data: EditorData) => void
+  private events = new AbortController()
 
   constructor(
     container: HTMLElement,
     userInfo: UserInfo | null,
     placeholder: string,
-    onSubmit: (data: any) => void,
+    onSubmit: (data: EditorData) => void,
     onCancel: () => void
   ) {
     this.container = container
@@ -47,12 +47,12 @@ export class Editor {
       <div class="vwrap">
         ${welcomeSection}
         <div class="${headerClass}">
-          <input name="nick" placeholder="称呼" class="vnick vinput" type="text" value="${userInfo?.nick || ''}" />
-          <input name="email" placeholder="邮箱" class="vmail vinput" type="email" value="${userInfo?.email || ''}" />
-          <input name="website" placeholder="网址" class="vlink vinput" type="text" value="${userInfo?.website || ''}" />
+          <input name="nick" placeholder="称呼" class="vnick vinput" type="text" value="${HtmlUtil.encode(userInfo?.nick || '')}" />
+          <input name="email" placeholder="邮箱" class="vmail vinput" type="email" value="${HtmlUtil.encode(userInfo?.email || '')}" />
+          <input name="website" placeholder="网址" class="vlink vinput" type="text" value="${HtmlUtil.encode(userInfo?.website || '')}" />
         </div>
         <div class="vedit">
-          <textarea class="veditor vinput" placeholder="${placeholder}"></textarea>
+          <textarea class="veditor vinput" placeholder="${HtmlUtil.encode(placeholder)}"></textarea>
         </div>
         <div class="vcontrol">
           <span class="smiles">
@@ -178,12 +178,31 @@ export class Editor {
     })
 
     // 点击外部关闭
-    document.body.addEventListener('mouseup', (e: Event) => {
-      const target = e.target as HTMLElement
-      if (!smiles.contains(target)) {
-        smiles.classList.remove('smiles-open')
-      }
-    })
+    document.body.addEventListener(
+      'mouseup',
+      (e: Event) => {
+        const target = e.target as HTMLElement
+        if (!smiles.contains(target)) {
+          smiles.classList.remove('smiles-open')
+        }
+      },
+      { signal: this.events.signal }
+    )
+  }
+
+  setSubmitting(submitting: boolean) {
+    this.container
+      .querySelectorAll<
+        HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement
+      >('input, textarea, button')
+      .forEach(element => {
+        element.disabled = submitting
+      })
+  }
+
+  destroy() {
+    this.events.abort()
+    this.container.replaceChildren()
   }
 
   clear() {

@@ -1,13 +1,10 @@
 import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
+import type { Bindings } from './types'
 import { cors } from 'hono/cors'
 import comments from './routes/comments'
 import admin from './routes/admin'
 import { initPlugins } from './plugins'
-
-type Bindings = {
-  DB: D1Database
-  ADMIN_TOKEN: string
-}
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -32,6 +29,19 @@ app.get('/', c => {
     version: '2.0.0',
     status: 'running',
   })
+})
+
+app.onError((error, c) => {
+  if (error instanceof HTTPException)
+    return c.json(
+      { error: 'Request Error', message: error.message },
+      error.status
+    )
+  console.error('Request failed:', error)
+  return c.json(
+    { error: 'Internal Server Error', message: '服务暂时不可用，请稍后重试' },
+    500
+  )
 })
 
 // 注册路由

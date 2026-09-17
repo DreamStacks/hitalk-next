@@ -2,19 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "hitalk-server",
   "main": "src/index.ts",
-  "compatibility_date": "2026-01-26",
+  "compatibility_date": "2026-09-16",
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "hitalk",
-      "database_id": "placeholder",
-      "preview_database_id": "placeholder",
-    },
-    {
-      "binding": "hitalk",
-      "database_name": "hitalk",
       "database_id": "a4cdba1f-2f54-4add-8125-49bd14d44f0c",
-      "remote": true,
+      "migrations_dir": "migrations",
     },
   ],
 }

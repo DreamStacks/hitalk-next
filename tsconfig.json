@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@hitalk/shared": ["./packages/shared/index.ts"],
       "@hitalk/shared/*": ["./packages/shared/*"]
     }
-  }
+  },
+  "files": []
 }

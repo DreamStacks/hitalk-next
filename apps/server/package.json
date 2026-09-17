@@ -1,25 +1,28 @@
 {
   "name": "@hitalk/server",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "db:init": "wrangler d1 execute hitalk --local --file=./src/schema.sql",
-    "db:migrate": "wrangler d1 execute hitalk --file=./src/schema.sql"
+    "db:init": "wrangler d1 migrations apply DB --local",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "db:backup:local": "wrangler d1 export DB --local",
+    "db:backup:remote": "wrangler d1 export DB --remote",
+    "build": "wrangler deploy --dry-run --outdir dist"
   },
   "dependencies": {
     "@hitalk/shared": "workspace:*",
-    "hono": "^4.11.5",
-    "markdown-it": "^14.1.0",
-    "markdown-it-emoji": "^3.0.0",
-    "nanoid": "^5.1.6",
+    "hono": "^4.13.8",
+    "markdown-it": "^15.0.2",
+    "markdown-it-emoji": "^3.1.0",
     "xss": "^1.0.15"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260127.0",
-    "@types/markdown-it": "^14.1.2",
-    "@types/markdown-it-emoji": "^3.0.1",
-    "wrangler": "^4.4.0"
+    "@cloudflare/workers-types": "^5.20260917.1",
+    "wrangler": "^4.133.0"
   }
 }

@@ -1,43 +1,26 @@
-import type { HitalkPlugin, PluginContext, PluginHooks } from '@hitalk/shared'
+import type { HitalkPlugin, PluginContext, CommentRow, Page } from '../types'
 
-/**
- * 插件管理器
- */
 export class PluginManager {
-  private plugins: HitalkPlugin[] = []
+  private plugins = new Map<string, HitalkPlugin>()
 
-  /**
-   * 注册插件
-   */
   register(plugin: HitalkPlugin) {
-    console.log(`[PluginManager] Registering plugin: ${plugin.name}`)
-    this.plugins.push(plugin)
+    this.plugins.set(plugin.name, plugin)
   }
 
-  /**
-   * 触发钩子
-   */
-  async trigger<K extends keyof PluginHooks>(
-    hook: K,
+  async commentCreated(
     ctx: PluginContext,
-    ...args: any[]
+    comment: CommentRow,
+    page: Page,
+    parent?: CommentRow
   ) {
-    for (const plugin of this.plugins) {
-      const fn = plugin[hook]
-      if (typeof fn === 'function') {
-        try {
-          // @ts-ignore
-          await fn(ctx, ...args)
-        } catch (error) {
-          console.error(
-            `[PluginManager] Error in plugin ${plugin.name} hook ${hook}:`,
-            error
-          )
-        }
+    for (const plugin of this.plugins.values()) {
+      try {
+        await plugin.onCommentCreated?.(ctx, comment, page, parent)
+      } catch (error) {
+        console.error(`[PluginManager] ${plugin.name} failed:`, error)
       }
     }
   }
 }
 
-// 单例模式导出
 export const pluginManager = new PluginManager()

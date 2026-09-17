@@ -1,292 +1,158 @@
-/**
- * 评论核心接口路由
- */
-
 import { Hono } from 'hono'
-import type {
-  CommentCreateRequest,
-  CommentListResponse,
-  LikeResponse,
-  ErrorResponse,
-} from '@hitalk/shared'
-import { renderMarkdown } from '../lib/markdown'
+import { HTTPException } from 'hono/http-exception'
+import { bodyLimit } from 'hono/body-limit'
+import type { CommentListResponse } from '@hitalk/shared'
+import type { Bindings } from '../types'
+import { isAdmin } from '../lib/auth'
 import {
+  badRequest,
+  commentInput,
+  pagePath,
+  positiveInteger,
+} from '../lib/validation'
+import {
+  getPage,
   getOrCreatePage,
-  createComment,
   getComments,
-  buildCommentTree,
+  rootCount,
+  createComment,
+  getCommentById,
+  publicComment,
+  hashIP,
   likeComment,
   getCommentCounts,
   pinComment,
   deleteComment,
-  getCommentById,
-  hashIP,
 } from '../lib/db'
 import { pluginManager } from '../lib/plugin-manager'
 
-type Bindings = {
-  DB: D1Database
-  ADMIN_TOKEN: string
-}
-
 const app = new Hono<{ Bindings: Bindings }>()
+app.use(
+  '*',
+  bodyLimit({
+    maxSize: 128 * 1024,
+    onError: c =>
+      c.json({ error: 'Payload Too Large', message: '请求内容过大' }, 413),
+  })
+)
 
-/**
- * 管理员权限校验
- */
-const isAdmin = (c: any) => {
-  const token =
-    c.req.header('Authorization')?.replace('Bearer ', '') ||
-    c.req.query('token')
-  const adminToken = c.env.ADMIN_TOKEN
-
-  if (!adminToken) {
-    console.warn('ADMIN_TOKEN is not set in environment')
-    return false
+async function jsonBody(request: { json: () => Promise<unknown> }) {
+  try {
+    return await request.json()
+  } catch (error) {
+    if (error instanceof HTTPException) throw error
+    if (error instanceof Error && error.name === 'BodyLimitError')
+      throw new HTTPException(413, { message: '请求内容过大' })
+    badRequest('JSON 格式不正确')
   }
-
-  return token === adminToken || token === `Bearer ${adminToken}`
 }
 
-/**
- * GET /comments?path=/posts/xxx
- * 获取指定页面的评论列表(树形结构)
- */
 app.get('/', async c => {
-  const path = c.req.query('path')
-
-  if (!path) {
-    return c.json<ErrorResponse>(
-      { error: 'Bad Request', message: '缺少 path 参数' },
-      400
-    )
+  const path = pagePath(c.req.query('path'))
+  const pageNumber = positiveInteger(c.req.query('page'), 1, 100000)
+  const size = positiveInteger(c.req.query('pageSize'), 10, 50)
+  const page = await getPage(c.env.DB, path)
+  const [comments, roots] = page
+    ? await Promise.all([
+        getComments(c.env.DB, page.id, size, (pageNumber - 1) * size),
+        rootCount(c.env.DB, page.id),
+      ])
+    : [[], 0]
+  const response: CommentListResponse = {
+    comments,
+    total: page?.comment_count || 0,
+    page_info: {
+      path,
+      title: page?.title || undefined,
+      comment_count: page?.comment_count || 0,
+    },
+    pagination: {
+      page: pageNumber,
+      page_size: size,
+      has_more: pageNumber * size < roots,
+    },
   }
-
-  try {
-    const db = c.env.DB
-    const page = await getOrCreatePage(db, path)
-    const comments = await getComments(db, page.id)
-    const tree = buildCommentTree(comments)
-
-    const response: CommentListResponse = {
-      comments: tree,
-      total: page.comment_count,
-      page_info: {
-        path: page.path,
-        title: page.title,
-        comment_count: page.comment_count,
-      },
-    }
-
-    return c.json(response)
-  } catch (error) {
-    console.error('获取评论失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '获取评论失败' },
-      500
-    )
-  }
+  return c.json(response)
 })
 
-/**
- * POST /comments
- * 提交新评论
- */
 app.post('/', async c => {
-  try {
-    const body = await c.req.json<CommentCreateRequest>()
-
-    // 验证必需字段
-    if (!body.path || !body.content || !body.nick) {
-      return c.json<ErrorResponse>(
-        {
-          error: 'Bad Request',
-          message: '缺少必需字段: path, content, nick',
-        },
-        400
-      )
-    }
-
-    const db = c.env.DB
-
-    // 获取或创建 page
-    const page = await getOrCreatePage(db, body.path, body.title)
-
-    // 渲染 Markdown
-    const content_html = renderMarkdown(body.content)
-
-    // 获取客户端 IP
-    const ip =
-      c.req.header('cf-connecting-ip') ||
-      c.req.header('x-forwarded-for') ||
-      'unknown'
-    const ip_hash = hashIP(ip)
-
-    // 获取 UA
-    const ua = c.req.header('user-agent') || ''
-
-    // 创建评论
-    const comment = await createComment(db, {
-      page_id: page.id,
-      parent_id: body.parent_id,
-      nick: body.nick,
-      email: body.email,
-      website: body.website,
-      content_md: body.content,
-      content_html,
-      ua,
-      ip_hash,
-      is_admin: isAdmin(c),
-    })
-
-    // 异步触发插件 (不阻塞响应)
-    c.executionCtx.waitUntil(
-      (async () => {
-        let parentComment = undefined
-        if (body.parent_id) {
-          parentComment =
-            (await getCommentById(db, body.parent_id)) || undefined
-        }
-        await pluginManager.trigger(
-          'onCommentCreated',
-          { env: c.env, db },
-          comment,
-          page,
-          parentComment
-        )
-      })()
-    )
-
-    return c.json(comment, 201)
-  } catch (error) {
-    console.error('创建评论失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '创建评论失败' },
-      500
-    )
+  const input = commentInput(await jsonBody(c.req))
+  const db = c.env.DB
+  const parent = input.parent_id
+    ? await getCommentById(db, input.parent_id)
+    : null
+  if (input.parent_id) {
+    const existingPage = await getPage(db, input.path)
+    if (!parent || parent.page_id !== existingPage?.id)
+      badRequest('回复目标不存在或不属于当前页面')
   }
+  const page = await getOrCreatePage(db, input.path, input.title)
+  let row
+  try {
+    row = await createComment(db, page.id, input, isAdmin(c))
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /invalid_parent|reply_depth_exceeded|FOREIGN KEY/.test(error.message)
+    )
+      badRequest('回复目标已失效或回复层级过深')
+    throw error
+  }
+  c.executionCtx.waitUntil(
+    pluginManager.commentCreated(
+      { env: c.env, db },
+      row,
+      page,
+      parent || undefined
+    )
+  )
+  return c.json(publicComment(row), 201)
 })
 
-/**
- * POST /comments/:id/like
- * 点赞评论
- */
-app.post('/:id/like', async c => {
-  const id = c.req.param('id')
-
-  try {
-    const db = c.env.DB
-
-    // 获取客户端 IP
-    const ip =
-      c.req.header('cf-connecting-ip') ||
-      c.req.header('x-forwarded-for') ||
-      'unknown'
-    const ip_hash = hashIP(ip)
-
-    const result = await likeComment(db, id, ip_hash)
-
-    const response: LikeResponse = {
-      success: result.success,
-      like_count: result.like_count,
-    }
-
-    return c.json(response)
-  } catch (error) {
-    console.error('点赞失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '点赞失败' },
-      500
-    )
-  }
-})
-
-/**
- * GET /comments/count?paths[]=/posts/a&paths[]=/posts/b
- * 批量获取评论数
- */
 app.get('/count', async c => {
   const paths = c.req.queries('paths[]') || []
-
-  if (paths.length === 0) {
-    return c.json<ErrorResponse>(
-      { error: 'Bad Request', message: '缺少 paths[] 参数' },
-      400
-    )
-  }
-
-  try {
-    const db = c.env.DB
-    const counts = await getCommentCounts(db, paths)
-    return c.json(counts)
-  } catch (error) {
-    console.error('获取评论数失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '获取评论数失败' },
-      500
-    )
-  }
+  if (paths.length < 1 || paths.length > 50)
+    badRequest('每次查询需要 1–50 个页面路径')
+  return c.json(
+    await getCommentCounts(c.env.DB, [...new Set(paths.map(pagePath))])
+  )
 })
 
-/**
- * PUT /comments/:id/pin
- * 置顶评论 (管理员)
- */
+app.post('/:id/like', async c => {
+  if (!c.env.IP_HASH_SALT)
+    throw new HTTPException(503, { message: '服务尚未配置 IP_HASH_SALT' })
+  const result = await likeComment(
+    c.env.DB,
+    c.req.param('id'),
+    await hashIP(
+      c.req.header('cf-connecting-ip') || 'unknown',
+      c.env.IP_HASH_SALT
+    )
+  )
+  if (!result) throw new HTTPException(404, { message: '评论不存在' })
+  return c.json(result)
+})
+
 app.put('/:id/pin', async c => {
-  if (!isAdmin(c)) {
-    return c.json<ErrorResponse>(
-      { error: 'Unauthorized', message: '管理权限验证失败' },
-      401
-    )
-  }
-
-  const id = c.req.param('id')
-  const { is_pinned } = await c.req.json<{ is_pinned: boolean }>()
-
-  try {
-    const db = c.env.DB
-    const result = await pinComment(db, id, is_pinned)
-    return c.json(result)
-  } catch (error) {
-    console.error('置顶失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '操作失败' },
-      500
-    )
-  }
+  if (!isAdmin(c)) throw new HTTPException(401, { message: '管理权限验证失败' })
+  const body = await jsonBody(c.req)
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('is_pinned' in body) ||
+    typeof body.is_pinned !== 'boolean'
+  )
+    badRequest('is_pinned 必须是布尔值')
+  if (!(await pinComment(c.env.DB, c.req.param('id'), body.is_pinned)))
+    throw new HTTPException(404, { message: '评论不存在' })
+  return c.json({ success: true, is_pinned: body.is_pinned })
 })
 
-/**
- * DELETE /comments/:id
- * 删除评论 (管理员)
- */
 app.delete('/:id', async c => {
-  if (!isAdmin(c)) {
-    return c.json<ErrorResponse>(
-      { error: 'Unauthorized', message: '管理权限验证失败' },
-      401
-    )
-  }
-
-  const id = c.req.param('id')
-
-  try {
-    const db = c.env.DB
-    const result = await deleteComment(db, id)
-    if (!result.success) {
-      return c.json<ErrorResponse>(
-        { error: 'Not Found', message: '评论不存在' },
-        404
-      )
-    }
-    return c.json({ success: true })
-  } catch (error) {
-    console.error('删除评论失败:', error)
-    return c.json<ErrorResponse>(
-      { error: 'Internal Server Error', message: '操作失败' },
-      500
-    )
-  }
+  if (!isAdmin(c)) throw new HTTPException(401, { message: '管理权限验证失败' })
+  if (!(await deleteComment(c.env.DB, c.req.param('id'))))
+    throw new HTTPException(404, { message: '评论不存在' })
+  return c.json({ success: true })
 })
 
 export default app

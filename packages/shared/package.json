@@ -1,7 +1,11 @@
 {
   "name": "@hitalk/shared",
   "version": "2.0.0",
+  "private": true,
   "type": "module",
   "main": "index.ts",
-  "types": "index.ts"
+  "types": "index.ts",
+  "dependencies": {
+    "valibot": "^1.5.0"
+  }
 }
