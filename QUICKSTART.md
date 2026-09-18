@@ -11,6 +11,6 @@ pnpm dev
 
 第一次发送前浏览器自动创建并持久保存匿名身份，无需注册、无需验证码。该浏览器可删除自己的评论及取消点赞。清空浏览器数据后无法认领旧身份。
 
-测试使用 `pnpm check` 与 `pnpm test:worker`。视觉验收由你在本地示例或真实博客页面完成。
+日常检查使用 `pnpm check`，完整验证使用 `pnpm check:ci`，全部构建使用 `pnpm build`。视觉验收由你在本地示例或真实博客页面完成。
 
-这是全新 schema，不连接旧库运行。生产数据库 ID 保留为占位，部署前创建新库并配置，详见 [运维说明](docs/operations.md)。
+提交并推送到 main 后，使用 `pnpm run deploy` 发布。需要已登录的 Wrangler、GitHub CLI，以及已配置的 Pages 仓库变量。当前生产使用独立的 hitalk-next-v3 数据库，旧库保留；其他环境使用自己的空库和域名。完整命令见 [运维说明](docs/operations.md)。

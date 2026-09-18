@@ -60,10 +60,11 @@ lit-html 和指令均内联进 ESM/IIFE，不要求 Vue、React 或 Hexo 消费�
 
 ## 验证与后续边界
 
-- pnpm check：格式、类型感知 lint、TypeScript、构建、Vitest、覆盖率门槛。
+- pnpm check：格式、类型感知 lint、TypeScript、SDK 构建、Vitest、覆盖率门槛。
+- pnpm check:ci：常规检查加独立 Worker 集成测试、Worker dry-run、前端构建；CI 直接使用此入口。
 - pnpm test:watch：开发交互测试。命令会先构建一次；涉及发布产物变化时重新执行 pnpm test。
 - pnpm test:worker：临时 Wrangler + D1，迁移重复执行、真实 HTTP、SQL 导出与恢复。
-- pnpm --filter @hitalk/server build：部署前 dry-run，仅打包。
+- pnpm build:server：部署前 dry-run，仅打包。
 - pnpm audit --prod --registry=https://registry.npmjs.org：本次报告生产依赖已知漏洞为 0；默认镜像未提供审计接口，因此显式使用官方源。
 
 当前数据模型使用 root_id 和 reply_to_id，删除仅清理单条内容，避免递归级联删除深度限制。测试使用假令牌与本地 D1，不读取开发邮件凭据。

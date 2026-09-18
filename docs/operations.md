@@ -12,7 +12,7 @@ pnpm db:seed
 pnpm dev
 ```
 
-远端部署由维护者选择时机执行：先创建空库并配置生产绑定，设置生产 secrets，再运行 db:migrate:remote 和 deploy。仓库检查仅 dry-run，不自动部署。数据库为空或独立重建不表示可以自动删除已有数据。
+当前部署使用已配置的生产绑定和 secrets；新部署环境先创建空库、修改绑定和域名，再设置 secrets。`pnpm deploy:server` 自动先运行 `db:migrate:remote`，再发布 Worker。仓库检查仅 dry-run，不自动部署；不删除已有数据库。
 
 ## 配置
 
@@ -51,13 +51,59 @@ pnpm preview:web
 
 ```sh
 pnpm check
-pnpm test:worker
-pnpm --filter @hitalk/server build
-pnpm build:web
+pnpm check:ci
 ```
 
 test:worker 在临时目录应用迁移两次、启动本地 Wrangler，验证 HTTP、并发幂等和点赞、删除保留回复，然后导出 SQL 并恢复到临时 SQLite。结束后清理测试进程和临时目录。
 
-使用后端 db:backup:local / db:backup:remote 脚本导出 SQL，并通过 `pnpm db:verify-backup /absolute/path/to/backup.sql` 验证。校验包括 SQLite 完整性、外键、同页同串/顺序关系、可见性视图和约束触发器。包含邮箱及身份凭证摘要的备份应作为私有数据保存。
+从根目录使用 `pnpm db:backup --output /absolute/path/local.sql` / `pnpm db:backup:remote --output /absolute/path/production.sql` 导出 SQL，并通过 `pnpm db:verify-backup /absolute/path/to/backup.sql` 验证。校验包括 SQLite 完整性、外键、同页同串/顺序关系、可见性视图和约束触发器。包含邮箱及身份凭证摘要的备份应作为私有数据保存。
 
 生产上线后若未来再更改结构，使用新的增量迁移；本次重置初始化结构的前提是项目尚未上线。当前不提供旧库导入器、旧 API 或双版本字段兼容。
+
+## 命令入口
+
+以下命令都在仓库根目录执行。workspace 保留所属工具的具体命令，根目录负责组合，不需要记住 filter 参数。
+
+| 命令                                                      | 用途                                                                          |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `pnpm dev`                                                | 初始化本地环境，启动 Worker 和 Vite，任一退出时关闭另一进程                   |
+| `pnpm dev:setup`                                          | 只生成缺失的本地 secrets，并应用本地迁移；不覆盖已有 secrets                  |
+| `pnpm dev:server` / `pnpm dev:web`                        | 单独启动后端 / 前端；首次使用先执行 dev:setup                                 |
+| `pnpm dev:sdk`                                            | 监听并构建 SDK 发布产物；示例页联调使用 dev，无需额外启动它                   |
+| `pnpm build`                                              | 构建 SDK、Worker 和静态前端                                                   |
+| `pnpm build:sdk` / `pnpm build:server` / `pnpm build:web` | 单独构建；Worker build 为 dry-run                                             |
+| `pnpm preview:web`                                        | 预览已生成的前端，127.0.0.1:4173；不会自动构建                                |
+| `pnpm test`                                               | 先构建 SDK，再运行常规测试；可追加测试文件名等 Vitest 参数                    |
+| `pnpm test:watch`                                         | 先构建 SDK，再监听测试；发布产物有变化时重新执行 test                         |
+| `pnpm test:coverage`                                      | 复用 test 入口并启用覆盖率检查                                                |
+| `pnpm test:worker`                                        | 独立 Wrangler + 临时 D1 的真实 HTTP 集成测试                                  |
+| `pnpm lint` / `pnpm lint:fix`                             | 类型感知 lint / 自动修复                                                      |
+| `pnpm format` / `pnpm format:check`                       | 格式化 / 只检查格式                                                           |
+| `pnpm typecheck`                                          | 服务端、SDK、示例及工具的 TypeScript 检查                                     |
+| `pnpm check`                                              | 日常检查：lint、格式、类型、测试和覆盖率                                      |
+| `pnpm check:ci`                                           | 完整检查：check、Worker 集成测试、Worker 和前端构建                           |
+| `pnpm run deploy`                                         | check:ci → 生产迁移 → Worker 发布 → 触发 Pages 工作流                         |
+| `pnpm deploy:server`                                      | 生产迁移和 Worker 发布，不重复执行测试                                        |
+| `pnpm deploy:web`                                         | 触发远端 main 的 Pages 工作流；工作流自行检查和构建                           |
+| `pnpm logs:server`                                        | 订阅生产 Worker 实时日志，Ctrl+C 退出                                         |
+| `pnpm db:migrate` / `pnpm db:migrate:remote`              | 应用本地 / 生产迁移                                                           |
+| `pnpm db:seed`                                            | 准备本地环境并写入可重复执行的虚构演示数据，仅本地                            |
+| `pnpm db:backup` / `pnpm db:backup:remote`                | 导出本地 / 生产 SQL，追加 `--output` 指定绝对路径                             |
+| `pnpm db:verify-backup <文件>`                            | 在临时内存库恢复备份并校验                                                    |
+| `pnpm clean`                                              | 删除 dist、SDK/Worker dist 和 coverage；保留 .wrangler 数据库、secrets 和依赖 |
+
+`prepare` 是安装依赖时启用 Husky 的生命周期脚本，无需手动执行。已移除重复的 `db:init` 和未使用的 `cf-typegen`；服务端绑定类型由 src/types.ts 维护。
+
+## 发布流程
+
+先完成提交并推送到 main，再执行：
+
+```sh
+pnpm run deploy
+```
+
+需要 Wrangler 已登录 Cloudflare、`gh` 已登录目标 GitHub 仓库，且 Pages 设置为 GitHub Actions 来源，仓库变量 HITALK_API_URL 已配置。Worker 发布本地代码，Pages 发布远端 main，因此部署前必须保证两者为同一提交。部署脚本不会自动提交或推送。
+
+必须保留 `run`：`pnpm deploy` 是 pnpm 自带的部署目录命令，与项目脚本不是一回事。`deploy:web` 触发后返回工作流链接，前端是否发布成功以该工作流结果为准，可用 `gh run watch <运行 ID> --exit-status` 等待；失败时不会把触发成功当成发布成功。
+
+`preview:web` 没有开发代理。预览构建时应设置 VITE_API_URL；Pages 工作流始终使用 HITALK_API_URL。只改前端可执行 deploy:web，只改 Worker 可执行 deploy:server；这两个快捷入口不运行本地 check:ci。

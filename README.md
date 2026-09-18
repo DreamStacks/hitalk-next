@@ -116,12 +116,14 @@ localStorage 凭证可以被宿主脚本读取，因此宿主必须可信；它�
 ## 检查与维护
 
 ```sh
-pnpm check
-pnpm test:worker
-pnpm --filter @hitalk/server build
-pnpm build:web
+pnpm dev          # 前后端联调，自动准备本地环境
+pnpm build        # SDK、Worker dry-run、前端全部构建
+pnpm test         # 常规自动化测试，先构建 SDK 发布产物
+pnpm check        # lint、格式、类型、测试和覆盖率
+pnpm check:ci     # 完整检查，追加 Worker 集成测试及前后端构建
+pnpm run deploy   # 完整检查、生产迁移、Worker 部署、触发 Pages 发布
 ```
 
 常规测试包括真实 workerd/D1、SDK jsdom、管理页、IIFE/ESM/声明、seed 和备份恢复。独立 Worker 测试在临时目录启动 Wrangler 并导出/恢复备份，不读取现有数据库或邮件凭据。视觉与布局验收由用户完成。
 
-部署配置、邮件和备份见 [运维说明](docs/operations.md)，模块职责和数据不变量见 [架构说明](docs/architecture.md)，实现范围见 [路线图](docs/roadmap.md)。
+部署前先提交并推送到 main，Pages 发布的是远端 main；`pnpm deploy` 是 pnpm 内置命令，项目部署必须写 `pnpm run deploy`。单项命令与部署配置、邮件和备份见 [运维说明](docs/operations.md)，模块职责和数据不变量见 [架构说明](docs/architecture.md)，实现范围见 [路线图](docs/roadmap.md)。

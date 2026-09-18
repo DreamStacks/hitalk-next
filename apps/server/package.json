@@ -3,17 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy --env production --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "db:init": "wrangler d1 migrations apply DB --local",
-    "db:migrate": "wrangler d1 migrations apply DB --local",
-    "typecheck": "tsc --noEmit",
-    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env production",
-    "db:backup:local": "wrangler d1 export DB --local",
-    "db:backup:remote": "wrangler d1 export DB --remote --env production",
+    "dev": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "build": "wrangler deploy --env production --dry-run --outdir dist",
-    "db:seed": "wrangler d1 execute DB --local --file ../../examples/playground/seed.sql"
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy --env production --minify",
+    "logs": "wrangler tail --env production",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote --env production",
+    "db:seed": "wrangler d1 execute DB --local --file ../../examples/playground/seed.sql",
+    "db:backup": "wrangler d1 export DB --local",
+    "db:backup:remote": "wrangler d1 export DB --remote --env production"
   },
   "dependencies": {
     "@hitalk/shared": "workspace:*",

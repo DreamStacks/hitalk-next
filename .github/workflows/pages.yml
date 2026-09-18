@@ -24,10 +24,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      - run: pnpm run check
       - run: |
           test -n "$VITE_API_URL"
-          pnpm build:web
+          pnpm run build:web
         env:
           VITE_API_URL: ${{ vars.HITALK_API_URL }}
           VITE_PAGE_PATH: /
