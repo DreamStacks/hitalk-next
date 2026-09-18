@@ -94,21 +94,99 @@
       </nav>
     </header>
 
-    <main class="page-main">
-      <section class="introduction" aria-labelledby="page-title">
-        <div class="introduction-topline">
-          <span class="page-label"
-            ><span aria-hidden="true">✳</span> 留言小院</span
+    <section class="hello-banner" aria-labelledby="page-title">
+      <div class="hello-art" aria-hidden="true">
+        <svg
+          class="hello-trails"
+          viewBox="0 0 1440 320"
+          preserveAspectRatio="none"
+          fill="none"
+        >
+          <path
+            class="hello-trail-back"
+            d="M-80 240C130 90 260 90 440 180S780 340 1030 150 1330 90 1520 130"
+          />
+          <path
+            class="hello-trail-front"
+            pathLength="1"
+            d="M-80 255C200 335 250 30 465 95S765 275 1000 160 1320 5 1520 100"
+          />
+        </svg>
+        <span class="hello-bubble hello-bubble-hi">hi<span>!</span></span>
+        <span class="hello-bubble hello-bubble-heart">♡</span>
+        <span class="hello-bubble hello-bubble-dots"
+          ><i></i><i></i><i></i
+        ></span>
+        <span class="hello-bubble hello-bubble-smile">
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 40 40"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
           >
-          <span class="greeting-stamp" aria-hidden="true">(｡･ω･｡)ﾉ hi~</span>
-        </div>
-        <h1 id="page-title">留下一点想法<span class="title-dot">。</span></h1>
-        <p>
-          开心的小事、突然的脑洞，<br class="mobile-break" />
-          或者只是来打个招呼～
-        </p>
-      </section>
+            <path d="M12 13v3m16-3v3M11 23q9 10 18 0" />
+          </svg>
+        </span>
+        <svg
+          class="hello-plane"
+          width="46"
+          height="46"
+          viewBox="0 0 48 48"
+          fill="none"
+        >
+          <path
+            d="M42 6 28 42l-8-14L6 20 42 6Z"
+            fill="var(--page-surface)"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+          />
+          <path
+            d="m42 6-22 22 8 14"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span class="hello-dot hello-dot-one"></span
+        ><span class="hello-dot hello-dot-two"></span>
+        <span class="hello-spark">✳</span>
+      </div>
+      <div class="hello-copy">
+        <span class="greeting-stamp" aria-hidden="true">(｡･ω･｡)ﾉ hi~</span>
+        <h1 id="page-title">你好，来聊聊<span>。</span></h1>
+        <p>来都来了，留个爪印吧。</p>
+      </div>
+      <label class="motion-toggle" title="暂停 / 继续背景动画">
+        <input type="checkbox" aria-label="暂停背景动画" />
+        <svg
+          class="motion-pause"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <rect x="4" y="3" width="2" height="10" rx="1" />
+          <rect x="10" y="3" width="2" height="10" rx="1" />
+        </svg>
+        <svg
+          class="motion-play"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="m5 3 8 5-8 5Z" />
+        </svg>
+      </label>
+    </section>
 
+    <main class="page-main">
       <section class="conversation" aria-labelledby="conversation-title">
         <div class="conversation-heading">
           <h2 id="conversation-title">

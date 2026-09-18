@@ -6,19 +6,39 @@
 .Hitalk .vemoji > button {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
+  min-width: 84px;
+  min-height: 44px;
+  padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  font-size: 22px;
+  border-radius: 999px;
+  background: var(--ht-btn-bg);
+  color: var(--ht-btn-text);
+  font-size: 15px;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .Hitalk .vemoji > button:hover:not(:disabled),
 .Hitalk .vemoji > button[aria-expanded='true'] {
   background: var(--ht-btn-bg);
   border-color: var(--ht-border);
+}
+
+.Hitalk .vemoji-face {
+  display: inline-block;
+  font-family: ui-rounded, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  transition: transform 180ms ease-out;
+}
+
+.Hitalk .vemoji > button:hover:not(:disabled) .vemoji-face,
+.Hitalk .vemoji > button[aria-expanded='true'] .vemoji-face {
+  transform: translateY(-1px) rotate(-5deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .Hitalk .vemoji-face {
+    transition: none;
+  }
 }
 
 /* The editor mounts this panel only while it is open. */

@@ -149,7 +149,9 @@ export class Editor {
                 this.render()
               }}
             >
-              😊</button
+              <span class="vemoji-face" aria-hidden="true"
+                >(｡•ᴗ•｡)</span
+              ></button
             >${
               this.emojiOpen
                 ? renderEmojiPicker(
