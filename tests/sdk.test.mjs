@@ -333,8 +333,54 @@ test('submit suppresses double clicks and does not turn cache failure into submi
   assert.equal(submit.disabled, false)
   assert.equal(
     f.document.querySelector('.hitalk-status').textContent.trim(),
-    ''
+    '评论已发送'
   )
+  assert.equal(
+    f.document.querySelector('.hitalk-feedback').dataset.kind,
+    'success'
+  )
+})
+
+test('successful submission does not hide a subsequent list reload error', async t => {
+  let loads = 0
+  const f = fixture(t, async (_url, init) => {
+    if (init.method === 'POST') return json(comment(), 201)
+    return ++loads === 1 ? json(list([])) : json({ message: 'temporary' }, 503)
+  })
+  await tick()
+  f.document.querySelector('.veditor').value = 'saved comment'
+  f.document.querySelector('.vsubmit').click()
+  await tick()
+  assert.equal(f.document.querySelector('.veditor').value, '')
+  assert.match(
+    f.document.querySelector('.hitalk-status').textContent,
+    /加载失败/
+  )
+  assert.equal(
+    f.document.querySelector('.hitalk-feedback').dataset.kind,
+    'error'
+  )
+  assert.equal(f.document.querySelector('.hitalk-retry').hidden, false)
+})
+
+test('duplicate likes use an informational notice without a reload action', async t => {
+  const f = fixture(t, async (_url, init) =>
+    init.method === 'POST'
+      ? json({ success: false, like_count: 1 })
+      : json(list([comment()]))
+  )
+  await tick()
+  f.document.querySelector('.vlike').click()
+  await tick()
+  assert.equal(
+    f.document.querySelector('.hitalk-status').textContent.trim(),
+    '您已经点过赞了'
+  )
+  assert.equal(
+    f.document.querySelector('.hitalk-feedback').dataset.kind,
+    'info'
+  )
+  assert.equal(f.document.querySelector('.hitalk-retry').hidden, true)
 })
 
 test('errors are visible as text and failed submission retains the draft', async t => {
@@ -351,6 +397,14 @@ test('errors are visible as text and failed submission retains the draft', async
     f.document.querySelector('.hitalk-status').textContent.includes('<img')
   )
   assert.equal(f.document.querySelector('.hitalk-status img'), null)
+  assert.equal(
+    f.document.querySelector('.hitalk-feedback').dataset.kind,
+    'error'
+  )
+  assert.equal(
+    f.document.querySelector('.hitalk-feedback').dataset.visible,
+    'true'
+  )
   assert.equal(f.document.querySelector('.veditor').value, 'keep me')
 })
 
@@ -459,9 +513,11 @@ test('a failed initial load can be retried from the rendered control', async t =
   await tick()
   const retry = f.document.querySelector('.hitalk-retry')
   assert.equal(retry.hidden, false)
+  assert.equal(retry.closest('.hitalk-feedback').dataset.visible, 'true')
   retry.click()
   await tick()
   assert.equal(retry.hidden, true)
+  assert.equal(retry.closest('.hitalk-feedback').dataset.visible, 'false')
   assert.equal(f.document.querySelectorAll('.vcard').length, 1)
 })
 

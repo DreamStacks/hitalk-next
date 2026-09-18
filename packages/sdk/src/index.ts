@@ -34,6 +34,7 @@ export class Hitalk {
   private editorHome = createRef<HTMLElement>()
   private listContainer = createRef<HTMLElement>()
   private message = ''
+  private messageKind: 'error' | 'info' | 'success' = 'info'
   private total: number | null = null
   private hasMore = false
   private retry = false
@@ -201,6 +202,8 @@ export class Hitalk {
         })
       this.editor.clear()
       await this.refresh()
+      if (!this.destroyed && !this.retry)
+        this.showMessage('评论已发送', 'success')
     } catch (error) {
       if (!this.destroyed)
         this.showMessage(`提交失败：${this.errorMessage(error)}`)
@@ -265,7 +268,7 @@ export class Hitalk {
         count: result.like_count,
       })
       this.store.setLikeCount(id, result.like_count)
-      if (!result.success) this.showMessage('您已经点过赞了')
+      if (!result.success) this.showMessage('您已经点过赞了', 'info')
     } catch (error) {
       if (!this.destroyed)
         this.showMessage(`点赞失败：${this.errorMessage(error)}`)
@@ -279,24 +282,41 @@ export class Hitalk {
     render(
       html`
         <div ${ref(this.editorHome)} class="editor-home"></div>
-        <div class="info">
+        <div
+          class="hitalk-feedback"
+          data-visible=${Boolean(this.message)}
+          data-kind=${this.messageKind}
+        >
+          <span
+            class="hitalk-feedback-icon"
+            aria-hidden="true"
+            ?hidden=${!this.message}
+            >${this.messageKind === 'success' ? '✓' : this.messageKind === 'error' ? '!' : 'i'}</span
+          >
+          <div
+            class="hitalk-status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            ${this.message}
+          </div>
+          <button
+            type="button"
+            class="vbtn hitalk-retry"
+            ?hidden=${!this.retry}
+            @click=${() => {
+              void this.refresh()
+            }}
+          >
+            重新加载
+          </button>
+        </div>
+        <div class="info" ?hidden=${this.total === null}>
           <div class="count">
             ${this.total === null ? '' : `评论(${this.total})`}
           </div>
         </div>
-        <div class="hitalk-status" role="status" aria-live="polite">
-          ${this.message}
-        </div>
-        <button
-          type="button"
-          class="vbtn hitalk-retry"
-          ?hidden=${!this.retry}
-          @click=${() => {
-            void this.refresh()
-          }}
-        >
-          重新加载
-        </button>
         <div class="loading-container">
           <div class="vloading${this.pending ? '' : ' dn'}">
             <div class="spinner">
@@ -306,6 +326,7 @@ export class Hitalk {
               <div class="r4"></div>
               <div class="r5"></div>
             </div>
+            <span class="hitalk-loading-label">正在处理，请稍候…</span>
           </div>
         </div>
         <div ${ref(this.listContainer)} class="comment-list-container"></div>
@@ -332,8 +353,12 @@ export class Hitalk {
     this.renderShell()
   }
 
-  private showMessage(message: string) {
+  private showMessage(
+    message: string,
+    kind: 'error' | 'info' | 'success' = 'error'
+  ) {
     this.message = message
+    this.messageKind = kind
     this.renderShell()
   }
   private errorMessage(error: unknown): string {
