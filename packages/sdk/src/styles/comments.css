@@ -1,5 +1,5 @@
-/* 评论列表 */
-.Hitalk .vlist {
+.Hitalk .vlist,
+.Hitalk .vquote {
   width: 100%;
   list-style: none;
   margin: 0;
@@ -7,190 +7,211 @@
 }
 
 .Hitalk .vcard {
-  padding-top: 1.5rem;
-  position: relative;
   display: flex;
   gap: 12px;
+  position: relative;
+  padding-top: 24px;
+  scroll-margin-block: 72px;
 }
 
 .Hitalk .vimg {
   width: 40px;
   height: 40px;
+  border: 1px solid var(--ht-border);
   border-radius: 50%;
   flex-shrink: 0;
-  transition: transform 0.6s;
-}
-
-.Hitalk .vimg:hover {
-  transform: rotate(360deg) scale(1.1);
+  object-fit: cover;
+  background: var(--ht-btn-bg);
 }
 
 .Hitalk .vcard > section {
   flex: 1;
   min-width: 0;
-  padding-bottom: 1.5rem;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--ht-card-border);
 }
 
 .Hitalk .vhead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 8px;
   line-height: 1.5;
-  margin-bottom: 10px;
 }
 
 .Hitalk .vhead a {
-  font-size: 0.875rem;
-  font-weight: 700;
   color: var(--ht-header);
+  font-size: 14px;
+  font-weight: 600;
   text-decoration: none;
-  margin-right: 10px;
+  overflow-wrap: anywhere;
 }
 
 .Hitalk .vhead a:hover {
   color: var(--ht-accent);
 }
 
-.Hitalk .vpin {
+.Hitalk .vpin,
+.Hitalk .vbadge {
   display: inline-block;
-  padding: 2px 6px;
-  background: var(--ht-tag-bg);
-  color: var(--ht-tag-color);
-  font-size: 0.75rem;
-  border-radius: 3px;
-  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
-.Hitalk .vtime {
+.Hitalk .vpin {
+  background: var(--ht-tag-bg);
+  color: var(--ht-tag-color);
+}
+
+.Hitalk .vbadge {
+  border: 1px solid var(--ht-border-dashed);
+  color: var(--ht-accent);
+}
+
+.Hitalk .vtime,
+.Hitalk .vua {
   color: var(--ht-muted);
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .Hitalk .vua {
-  display: block;
-  margin-top: 4px;
-  color: var(--ht-muted);
-  font-size: 0.75rem;
+  flex-basis: 100%;
   overflow-wrap: anywhere;
 }
 
 .Hitalk .vcontent {
-  overflow-wrap: break-word;
-  word-break: break-word;
-  text-align: justify;
-  color: var(--ht-text);
-  font-size: 0.875rem;
-  line-height: 1.8;
   position: relative;
-  margin-bottom: 12px;
-}
-
-.Hitalk .vcontent img.biaoqing {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 0 2px;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+  color: var(--ht-text);
+  font-size: 14px;
+  line-height: 1.8;
 }
 
 .Hitalk .vcontent p {
   margin: 8px 0;
 }
 
+.Hitalk .vcontent img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.Hitalk .vcontent img.biaoqing {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
 .Hitalk .vreply-to {
   display: inline-block;
-  margin-bottom: 6px;
+  max-width: 100%;
+  min-height: 32px;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-left: 2px solid var(--ht-border-dashed);
+  border-radius: 0;
+  background: transparent;
   color: var(--ht-accent);
-  font-size: 0.8125rem;
+  font-size: 12px;
+  text-align: left;
   overflow-wrap: anywhere;
+}
+
+.Hitalk .vreply-to:hover:not(:disabled) {
+  border-color: var(--ht-accent);
+  background: var(--ht-btn-bg);
 }
 
 .Hitalk .vcard:focus {
   outline: none;
 }
 
-.Hitalk .vcard:focus-visible {
-  outline: 2px solid var(--ht-accent);
-  outline-offset: 4px;
+.Hitalk .vcard:focus-visible > section > .vhead {
+  position: relative;
 }
 
-.Hitalk .vfooter {
+.Hitalk .vcard:focus-visible > section > .vhead::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -6px;
+  top: 0;
+  height: 1.5em;
+  border-inline-start: 2px solid var(--ht-accent);
+}
+
+.Hitalk .vmeta {
   display: flex;
-  gap: 15px;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 4px 8px;
 }
 
-.Hitalk .vlike {
+.Hitalk .vmeta button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 0.8125rem;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   color: var(--ht-muted);
-  cursor: pointer;
-  user-select: none;
+  font-size: 12px;
 }
 
-.Hitalk .vlike:hover {
-  color: var(--ht-tag-bg);
+.Hitalk .vmeta button:hover:not(:disabled) {
+  background: var(--ht-btn-bg);
+  color: var(--ht-accent);
 }
 
-.Hitalk .vlike-icon {
-  font-style: normal;
-  font-size: 1rem;
-}
-
-.Hitalk .vat {
-  font-size: 0.8125rem;
+.Hitalk .vmeta .vlike[aria-pressed='true'],
+.Hitalk .vmeta .vdelete:hover:not(:disabled) {
   color: var(--ht-danger);
-  cursor: pointer;
-  user-select: none;
 }
 
-.Hitalk .vat:hover {
-  text-decoration: underline;
+.Hitalk .vquote:not(:empty) {
+  margin-top: 12px;
+  padding-left: 16px;
+  border-left: 2px solid var(--ht-border);
 }
 
-/* 嵌套评论 */
-.Hitalk .vchildren {
-  margin-top: 1rem;
-  border-top: 1px dashed var(--ht-border);
+.Hitalk .vquote .vcard {
+  padding-top: 16px;
 }
 
-.Hitalk .vchildren .vcard {
-  padding-top: 1rem;
+.Hitalk .vquote .vcard:first-child {
+  padding-top: 0;
 }
 
-.Hitalk .vchildren .vimg {
+.Hitalk .vquote .vimg {
   width: 32px;
   height: 32px;
 }
 
-.Hitalk .vchildren .vcard > section {
-  padding-bottom: 0.5rem;
+.Hitalk .vquote .vcard > section {
+  padding-bottom: 16px;
+  border-bottom: 0;
 }
 
-@media screen and (max-width: 520px) {
-  .Hitalk .vchildren {
-    margin-left: 26px;
-  }
+.Hitalk .vquote .vcard:last-child > section {
+  padding-bottom: 0;
 }
 
-/* Markdown 内容与折叠状态 */
-.Hitalk .vcontent {
-  word-wrap: break-word;
-  word-break: break-word;
-  text-align: justify;
-  color: var(--ht-text);
-  font-size: 0.875rem;
-  line-height: 1.8;
-  position: relative;
-  margin-bottom: 12px;
-}
-
-.Hitalk .vcontent img.biaoqing {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 0 2px;
-}
-
-.Hitalk .vcontent p {
-  margin: 8px 0;
+.Hitalk .vmore-replies {
+  margin-top: 16px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--ht-accent);
+  font-size: 12px;
 }
 
 .Hitalk .vcontent table {
@@ -211,6 +232,13 @@
   font-weight: 600;
 }
 
+.Hitalk .vcontent blockquote {
+  margin: 12px 0;
+  padding: 2px 14px;
+  border-left: 3px solid var(--ht-border-dashed);
+  color: var(--ht-muted);
+}
+
 .Hitalk .vcontent hr {
   margin: 16px 0;
   border: 0;
@@ -225,39 +253,67 @@
 .Hitalk .vcontent a {
   color: var(--ht-accent);
   text-decoration: underline;
-}
-
-.Hitalk .vcontent a:hover {
-  color: var(--ht-danger);
+  text-underline-offset: 3px;
 }
 
 .Hitalk .vcontent code,
 .Hitalk .vcontent pre {
-  display: inline-block;
-  padding: 2px 8px;
   background: var(--ht-code-bg);
-  border-radius: 3px;
-  font-size: 0.875rem;
-  font-family: 'Courier New', monospace;
+  border-radius: 4px;
   color: var(--ht-code-text);
+  font:
+    13px/1.7 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+
+.Hitalk .vcontent code {
+  padding: 2px 5px;
+}
+
+.Hitalk .vcontent pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 12px 14px;
+}
+
+.Hitalk .vcontent pre code {
+  padding: 0;
+  background: none;
 }
 
 .Hitalk .vcontent.expand {
-  cursor: pointer;
   max-height: 180px;
   overflow: hidden;
-  position: relative;
+  cursor: pointer;
 }
 
-.Hitalk .vcontent.expand:after {
-  content: 'Click to expand...';
+.Hitalk .vcontent.expand::after {
+  content: '点击展开全文';
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 50px;
-  line-height: 50px;
+  inset: auto 0 0;
+  padding: 12px;
+  background: var(--ht-bg);
+  border-top: 1px dashed var(--ht-border);
+  color: var(--ht-accent);
   text-align: center;
-  background: linear-gradient(transparent, var(--ht-bg));
-  color: var(--ht-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .Hitalk .vcard {
+    gap: 8px;
+  }
+  .Hitalk .vimg {
+    width: 32px;
+    height: 32px;
+  }
+  .Hitalk .vquote:not(:empty) {
+    padding-left: 8px;
+  }
+  .Hitalk .vquote .vimg {
+    width: 24px;
+    height: 24px;
+  }
 }

@@ -85,6 +85,7 @@ export async function startWorker() {
         compatibility_date: original.compatibility_date,
         vars: {
           ADMIN_TOKEN: 'local-test-admin',
+          RATE_LIMIT_ENABLED: 'false',
           IP_HASH_SALT: 'local-test-ip-salt',
         },
         d1_databases: [

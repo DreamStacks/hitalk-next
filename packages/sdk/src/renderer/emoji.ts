@@ -32,18 +32,21 @@ export function renderEmojiPicker(
         >
           ${category.emojis.map(
             emoji => html`
-              <li
-                class="smiles-item"
-                title=${emoji}
-                data-input=${`${category.prefix}(${emoji})`}
-                @click=${() => onSelect(`${category.prefix}(${emoji})`)}
-              >
-                <img
-                  class="biaoqing ${category.className}"
+              <li>
+                <button
+                  type="button"
+                  class="smiles-item"
                   title=${emoji}
-                  src=${`https://cdn.ihoey.com/${category.className}/${emoji}@2x.png`}
-                  alt=${emoji}
-                />
+                  data-input=${`${category.prefix}(${emoji})`}
+                  @click=${() => onSelect(`${category.prefix}(${emoji})`)}
+                >
+                  <img
+                    class="biaoqing ${category.className}"
+                    title=${emoji}
+                    src=${`https://cdn.ihoey.com/${category.className}/${emoji}@2x.png`}
+                    alt=${emoji}
+                  />
+                </button>
               </li>
             `
           )}
@@ -54,12 +57,16 @@ export function renderEmojiPicker(
       <ul class="smiles-packages">
         ${categories.map(
           category => html`
-            <li
-              class="smiles-name${active === category.index ? ' smiles-package-active' : ''}"
-              data-id=${category.index}
-              @click=${() => onCategory(category.index)}
-            >
-              <span>${category.name}</span>
+            <li>
+              <button
+                type="button"
+                aria-pressed=${String(active === category.index)}
+                class="smiles-name${active === category.index ? ' smiles-package-active' : ''}"
+                data-id=${category.index}
+                @click=${() => onCategory(category.index)}
+              >
+                <span>${category.name}</span>
+              </button>
             </li>
           `
         )}

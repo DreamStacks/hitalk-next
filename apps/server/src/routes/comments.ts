@@ -1,164 +1,161 @@
+import { createComment, likeComment, deleteComment } from '../services/comments'
 import { Hono } from 'hono'
-import { HTTPException } from 'hono/http-exception'
-import { bodyLimit } from 'hono/body-limit'
-import type { CommentListResponse } from '@hitalk/shared'
-import type { Bindings } from '../types'
-import { isAdmin } from '../lib/auth'
+import type { Bindings, CommentRow } from '../types'
+import { credential, identity, requireActive, limitWrite } from '../lib/auth'
 import {
-  badRequest,
   commentInput,
   pagePath,
   positiveInteger,
+  badRequest,
 } from '../lib/validation'
 import {
-  getPage,
-  getOrCreatePage,
-  getComments,
-  rootCount,
-  createComment,
-  getCommentById,
-  publicComment,
-  hashIP,
-  likeComment,
+  listComments,
+  listReplies,
+  commentContext,
   getCommentCounts,
-  pinComment,
-  deleteComment,
+  publicComments,
 } from '../lib/db'
-import { pluginManager } from '../lib/plugin-manager'
-
+import { processNotifications } from '../services/notifications'
+import { fail } from '../lib/errors'
 const app = new Hono<{ Bindings: Bindings }>()
-app.use(
-  '*',
-  bodyLimit({
-    maxSize: 128 * 1024,
-    onError: c =>
-      c.json({ error: 'Payload Too Large', message: '请求内容过大' }, 413),
-  })
-)
-
-async function jsonBody(request: { json: () => Promise<unknown> }) {
+export async function jsonBody(request: { json: () => Promise<unknown> }) {
   try {
     return await request.json()
-  } catch (error) {
-    if (error instanceof HTTPException) throw error
-    if (error instanceof Error && error.name === 'BodyLimitError')
-      throw new HTTPException(413, { message: '请求内容过大' })
+  } catch {
     badRequest('JSON 格式不正确')
   }
 }
-
-app.get('/', async c => {
-  const path = pagePath(c.req.query('path'))
-  const pageNumber = positiveInteger(c.req.query('page'), 1, 100000)
-  const size = positiveInteger(c.req.query('pageSize'), 10, 50)
-  const page = await getPage(c.env.DB, path)
-  const [comments, roots] = page
-    ? await Promise.all([
-        getComments(c.env.DB, page.id, size, (pageNumber - 1) * size),
-        rootCount(c.env.DB, page.id),
-      ])
-    : [[], 0]
-  const response: CommentListResponse = {
-    comments,
-    total: page?.comment_count || 0,
-    page_info: {
-      path,
-      title: page?.title || undefined,
-      comment_count: page?.comment_count || 0,
-    },
-    pagination: {
-      page: pageNumber,
-      page_size: size,
-      has_more: pageNumber * size < roots,
-    },
-  }
-  return c.json(response)
-})
-
-app.post('/', async c => {
-  const input = commentInput(await jsonBody(c.req))
-  const db = c.env.DB
-  const parent = input.parent_id
-    ? await getCommentById(db, input.parent_id)
-    : null
-  if (input.parent_id) {
-    const existingPage = await getPage(db, input.path)
-    if (!parent || parent.page_id !== existingPage?.id)
-      badRequest('回复目标不存在或不属于当前页面')
-  }
-  const page = await getOrCreatePage(db, input.path, input.title)
-  let row
-  try {
-    row = await createComment(
-      db,
-      page.id,
-      input,
-      isAdmin(c),
-      c.req.header('user-agent')
-    )
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      /invalid_parent|reply_depth_exceeded|FOREIGN KEY/.test(error.message)
-    )
-      badRequest('回复目标已失效或回复层级过深')
-    throw error
-  }
-  c.executionCtx.waitUntil(
-    pluginManager.commentCreated(
-      { env: c.env, db },
-      row,
-      page,
-      parent || undefined
-    )
+app.get('/config', c =>
+  c.json({
+    comments_enabled: c.env.COMMENTS_ENABLED !== 'false',
+    moderation: c.env.MODERATION_MODE === 'pre' ? 'pre' : 'post',
+    max_length: 20000,
+  })
+)
+app.get('/comments', async c => {
+  const actor = await identity(c.env.DB, await credential(c))
+  const result = await listComments(
+    c.env.DB,
+    pagePath(c.req.query('path')),
+    positiveInteger(c.req.query('limit'), 10, 20),
+    c.req.query('cursor'),
+    actor
   )
-  return c.json(publicComment(row), 201)
+  result.comments_enabled =
+    result.comments_enabled && c.env.COMMENTS_ENABLED !== 'false'
+  return c.json(result)
 })
-
-app.get('/count', async c => {
+app.get('/comments/count', async c => {
   const paths = c.req.queries('paths[]') || []
-  if (paths.length < 1 || paths.length > 50)
+  if (!paths.length || paths.length > 50)
     badRequest('每次查询需要 1–50 个页面路径')
   return c.json(
     await getCommentCounts(c.env.DB, [...new Set(paths.map(pagePath))])
   )
 })
-
-app.post('/:id/like', async c => {
-  if (!c.env.IP_HASH_SALT)
-    throw new HTTPException(503, { message: '服务尚未配置 IP_HASH_SALT' })
-  const result = await likeComment(
-    c.env.DB,
-    c.req.param('id'),
-    await hashIP(
-      c.req.header('cf-connecting-ip') || 'unknown',
-      c.env.IP_HASH_SALT
+app.get('/threads/:id/replies', async c =>
+  c.json(
+    await listReplies(
+      c.env.DB,
+      c.req.param('id'),
+      positiveInteger(c.req.query('limit'), 20, 50),
+      c.req.query('cursor'),
+      await identity(c.env.DB, await credential(c))
     )
   )
-  if (!result) throw new HTTPException(404, { message: '评论不存在' })
-  return c.json(result)
-})
-
-app.put('/:id/pin', async c => {
-  if (!isAdmin(c)) throw new HTTPException(401, { message: '管理权限验证失败' })
-  const body = await jsonBody(c.req)
-  if (
-    !body ||
-    typeof body !== 'object' ||
-    !('is_pinned' in body) ||
-    typeof body.is_pinned !== 'boolean'
+)
+app.get('/comments/:id/context', async c =>
+  c.json(
+    await commentContext(
+      c.env.DB,
+      c.req.param('id'),
+      await identity(c.env.DB, await credential(c))
+    )
   )
-    badRequest('is_pinned 必须是布尔值')
-  if (!(await pinComment(c.env.DB, c.req.param('id'), body.is_pinned)))
-    throw new HTTPException(404, { message: '评论不存在' })
-  return c.json({ success: true, is_pinned: body.is_pinned })
+)
+app.post('/comments', async c => {
+  const hash = (await credential(c, true))!
+  await limitWrite(c, hash)
+  const result = await createComment(
+    c.env,
+    hash,
+    commentInput(await jsonBody(c.req)),
+    c.req.header('user-agent')
+  )
+  c.executionCtx.waitUntil(processNotifications(c.env))
+  return c.json(result, 201)
 })
-
-app.delete('/:id', async c => {
-  if (!isAdmin(c)) throw new HTTPException(401, { message: '管理权限验证失败' })
-  if (!(await deleteComment(c.env.DB, c.req.param('id'))))
-    throw new HTTPException(404, { message: '评论不存在' })
+app.put('/comments/:id/like', async c => {
+  const hash = (await credential(c, true))!
+  await limitWrite(c, hash)
+  return c.json(await likeComment(c.env.DB, c.req.param('id'), hash, true))
+})
+app.delete('/comments/:id/like', async c => {
+  const hash = (await credential(c, true))!
+  await limitWrite(c, hash)
+  return c.json(await likeComment(c.env.DB, c.req.param('id'), hash, false))
+})
+app.delete('/comments/:id', async c => {
+  const hash = (await credential(c, true))!
+  await limitWrite(c, hash)
+  const actor = await identity(c.env.DB, hash)
+  requireActive(actor)
+  if (!actor) fail(401, 'IDENTITY_REQUIRED', '身份尚未建立')
+  await deleteComment(c.env.DB, c.req.param('id'), actor)
   return c.json({ success: true })
 })
-
+app.get('/me', async c => {
+  const actor = await identity(c.env.DB, await credential(c, true))
+  if (!actor) fail(401, 'IDENTITY_REQUIRED', '身份尚未建立')
+  return c.json({ status: actor.status })
+})
+app.get('/me/comments', async c => {
+  const actor = await identity(c.env.DB, await credential(c, true))
+  if (!actor) fail(401, 'IDENTITY_REQUIRED', '身份尚未建立')
+  const path = pagePath(c.req.query('path'))
+  const before = positiveInteger(
+    c.req.query('before'),
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER
+  )
+  const rows = await c.env.DB.prepare(
+    "SELECT c.* FROM comments c JOIN pages p ON p.id=c.page_id WHERE p.path=? AND c.author_id=? AND c.seq<? AND (?='' OR c.moderation_status=?) AND c.deleted_at IS NULL ORDER BY c.seq DESC LIMIT 21"
+  )
+    .bind(
+      path,
+      actor.id,
+      before,
+      c.req.query('status') || '',
+      c.req.query('status') || ''
+    )
+    .all<CommentRow>()
+  return c.json({
+    comments: await publicComments(c.env.DB, rows.results.slice(0, 20), actor),
+    next: rows.results.length > 20 ? rows.results[19].seq : null,
+  })
+})
+app.get('/notifications/unsubscribe/:id', c =>
+  c.html(
+    '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>停止通知</title><form method="post"><button>停止向此邮箱发送评论通知</button></form></html>'
+  )
+)
+app.post('/notifications/unsubscribe/:id', async c => {
+  const job = await c.env.DB.prepare(
+    'SELECT recipient FROM notification_jobs WHERE id=?'
+  )
+    .bind(c.req.param('id'))
+    .first<{ recipient: string }>()
+  if (!job?.recipient) fail(404, 'NOT_FOUND', '链接无效')
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      'INSERT INTO email_suppressions(recipient) VALUES(?) ON CONFLICT DO NOTHING'
+    ).bind(job.recipient),
+    c.env.DB.prepare(
+      "UPDATE notification_jobs SET status='cancelled',lease_token=NULL,payload_json=NULL WHERE recipient=? AND status IN ('pending','sending')"
+    ).bind(job.recipient),
+  ])
+  return c.html(
+    '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><p>已停止邮件通知。</p></html>'
+  )
+})
 export default app

@@ -1,56 +1,67 @@
-/* 评论框容器 */
 .Hitalk .vwrap {
-  border: 1px solid var(--ht-border);
-  border-radius: 4px;
-  margin-bottom: 10px;
   position: relative;
-  padding: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--ht-border-dashed);
+  border-radius: 8px;
   background: var(--ht-input-bg);
 }
 
-/* 欢迎信息 */
-.Hitalk .welcome {
-  position: relative;
-  padding-bottom: 10px;
-  font-size: 0.875rem;
-  color: var(--ht-muted);
-  border-bottom: 1px var(--ht-border-dashed) dashed;
-  user-select: none;
-}
-
-.Hitalk .welcome span {
-  color: var(--ht-accent);
-  cursor: pointer;
-}
-
-/* 用户信息输入区 */
 .Hitalk .vheader {
   display: flex;
-  gap: 10px;
   flex-wrap: wrap;
+  gap: 0 16px;
 }
 
-.Hitalk .vheader.hide {
-  display: none;
+.Hitalk .vprofile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 45px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--ht-border-dashed);
+}
+
+.Hitalk .vprofile-nick {
+  min-width: 0;
+  color: var(--ht-header);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.Hitalk .vprofile-edit {
+  flex-shrink: 0;
+  margin-left: auto;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ht-accent);
+  font-size: 12px;
+}
+
+.Hitalk .vprofile-edit:hover:not(:disabled) {
+  background: var(--ht-btn-bg);
 }
 
 .Hitalk .vheader .vinput {
-  flex: 1;
-  min-width: 200px;
-  border-bottom: 1px var(--ht-border-dashed) dashed;
+  flex: 1 1 140px;
+  min-width: 0;
+  width: 100%;
+  border-bottom: 1px dashed var(--ht-border-dashed);
   color: var(--ht-header);
 }
 
-/* 编辑器 */
 .Hitalk .veditor {
   width: 100%;
-  min-height: 140px;
+  min-height: 160px;
+  margin-top: 8px;
   border-bottom: 1px dashed var(--ht-border-dashed);
   background: url(https://cdn.ihoey.com/plbj.png) right bottom no-repeat;
-  color: var(--ht-text);
+  resize: vertical;
 }
 
-/* 文本框的鼠标与键盘聚焦共用底线提示，避免大面积外框。 */
 .Hitalk .vheader .vinput:focus,
 .Hitalk .veditor:focus {
   outline: none;
@@ -59,7 +70,6 @@
   box-shadow: 0 1px 0 var(--ht-accent);
 }
 
-/* 高对比模式可能隐藏阴影，使用系统焦点颜色。 */
 @media (forced-colors: active) {
   .Hitalk .vheader .vinput:focus,
   .Hitalk .veditor:focus {
@@ -68,23 +78,93 @@
   }
 }
 
-/* 输入时隐藏插画，避免遮挡文字和光标。 */
 .Hitalk .veditor:focus,
 .Hitalk .veditor:not(:placeholder-shown) {
   background-image: none;
 }
 
-/* 控制栏 */
-.Hitalk .vcontrol {
+.Hitalk .vreplying {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding-top: 10px;
-  font-size: 0.725rem;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--ht-accent);
+  background: var(--ht-btn-bg);
+  color: var(--ht-header);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
-@media screen and (max-width: 520px) {
+.Hitalk .vreplying button {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ht-accent);
+  font-size: 12px;
+}
+
+.Hitalk .vreplying button:hover:not(:disabled) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.Hitalk .vcontrol {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding-top: 12px;
+}
+
+.Hitalk .vcontrol > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  color: var(--ht-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.Hitalk .vnotify {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ht-accent);
+}
+
+.Hitalk .vsubmit {
+  min-width: 88px;
+  margin-left: auto;
+  border-color: var(--ht-accent);
+  background: var(--ht-accent);
+  color: var(--ht-accent-text);
+}
+
+.Hitalk .hitalk-reply-slot:not(:empty) {
+  margin-top: 12px;
+}
+
+@media (max-width: 520px) {
   .Hitalk .vheader .vinput {
-    min-width: 100%;
+    flex-basis: 100%;
+    /* Prevent automatic input zoom on mobile browsers. */
+    font-size: 16px;
+  }
+
+  .Hitalk .veditor {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .Hitalk .vcontrol > label {
+    order: 1;
+    flex-basis: 100%;
+    min-height: 32px;
   }
 }

@@ -1,55 +1,72 @@
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
-import { runInContext } from 'node:vm'
 import { adminPage } from '../apps/server/src/ui/admin-page.ts'
-import { tick, json, comment } from './helpers/comments.mjs'
-
-test('admin renders hostile source Markdown and nickname as text, sends credentials only in headers', async t => {
+import { tick, json, deferred } from './helpers/comments.mjs'
+function page(t, handler) {
+  const requests = []
   const dom = new JSDOM(adminPage, {
-    url: 'https://example.com/admin?token=legacy',
-    runScripts: 'outside-only',
+    url: 'https://example.com/admin',
+    runScripts: 'dangerously',
+    beforeParse(window) {
+      window.fetch = async (url, init) => {
+        requests.push({ url, init })
+        return handler(url, init)
+      }
+      window.confirm = () => true
+    },
   })
   t.onTestFinished(() => dom.window.close())
-  const requests = []
-  dom.window.fetch = async (url, init) => {
-    requests.push({ url, init })
-    return json({
+  return { dom, requests, doc: dom.window.document }
+}
+function login(doc) {
+  doc.getElementById('token').value = 'test-admin'
+  doc
+    .getElementById('login')
+    .dispatchEvent(new doc.defaultView.Event('submit', { cancelable: true }))
+}
+test('admin treats hostile content as text and keeps credential only in headers/memory', async t => {
+  const { doc, requests, dom } = page(t, () =>
+    json({
       comments: [
         {
-          ...comment(),
-          content_md: '"><img src=x onerror=alert(1)>',
-          nick: '<script>bad</script>',
-          email: 'person@example.invalid',
+          id: 'a',
+          nick: '<img onerror=alert(1)>',
+          content_md: '<script>bad</script>',
           page_path: '/article',
+          moderation_status: 'published',
+          author_id: 'visitor',
+          author_status: 'active',
+          root_id: null,
         },
       ],
-      has_more: false,
+      next: null,
     })
-  }
-  runInContext(
-    dom.window.document.querySelector('script').textContent,
-    dom.getInternalVMContext()
   )
-  const input = dom.window.document.querySelector('#token')
-  input.value = 'test-admin'
-  dom.window.document
-    .querySelector('#login')
-    .dispatchEvent(new dom.window.Event('submit', { cancelable: true }))
+  login(doc)
   await tick()
-  assert.equal(dom.window.location.search, '')
+  assert.equal(doc.querySelector('#list img'), null)
+  assert.equal(doc.querySelector('#list script'), null)
   assert.equal(requests[0].init.headers.Authorization, 'Bearer test-admin')
   assert.ok(!requests[0].url.includes('token'))
-  assert.equal(input.value, '')
-  assert.equal(
-    dom.window.document.querySelectorAll(
-      '#list img, #list script, #list [onerror]'
-    ).length,
-    0
+  assert.equal(dom.window.localStorage.length, 0)
+  const button = [...doc.querySelectorAll('#list button')].find(
+    b => b.textContent === '隐藏'
   )
-  assert.ok(
-    dom.window.document
-      .querySelector('#list')
-      .textContent.includes('<script>bad</script>')
-  )
+  button.click()
+  await tick()
+  assert.equal(requests[1].init.method, 'PATCH')
+  assert.deepEqual(JSON.parse(requests[1].init.body), { status: 'hidden' })
+  doc.getElementById('logout').click()
+  assert.equal(doc.getElementById('panel').hidden, true)
+  assert.equal(doc.getElementById('list').children.length, 0)
+})
+test('late administrative responses cannot reopen a logged-out panel', async t => {
+  const wait = deferred()
+  const { doc } = page(t, () => wait.promise)
+  login(doc)
+  doc.getElementById('logout').click()
+  wait.resolve(json({ comments: [], next: null }))
+  await tick()
+  assert.equal(doc.getElementById('panel').hidden, true)
 })

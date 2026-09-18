@@ -25,9 +25,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm build:web
+      - run: |
+          test -n "$VITE_API_URL"
+          pnpm build:web
         env:
-          VITE_API_URL: https://hitalk-next-api.ihoey.com
+          VITE_API_URL: ${{ vars.HITALK_API_URL }}
+          VITE_PAGE_PATH: /
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist/web

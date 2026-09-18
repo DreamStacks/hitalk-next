@@ -3,22 +3,49 @@
   "name": "hitalk-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-16",
+  "vars": { "RATE_LIMIT_ENABLED": "true", "MODERATION_MODE": "post" },
+  "ratelimits": [
+    {
+      "name": "WRITE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 30, "period": 60 },
+    },
+  ],
+  "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "hitalk",
-      "database_id": "a4cdba1f-2f54-4add-8125-49bd14d44f0c",
+      "database_name": "hitalk-fresh",
+      "database_id": "61c43b5e-ad03-43bd-9ba9-3b1b2ff3f419",
       "migrations_dir": "migrations",
     },
   ],
   "env": {
     "production": {
       "name": "hitalk-server",
+      "routes": [
+        { "pattern": "hitalk-next-api.ihoey.com", "custom_domain": true },
+      ],
+      "vars": {
+        "RATE_LIMIT_ENABLED": "true",
+        "MODERATION_MODE": "post",
+        "EMAIL_ENABLED": "false",
+        "SITE_URL": "https://hitalk-next.ihoey.com",
+        "NOTIFICATION_API_URL": "https://hitalk-next-api.ihoey.com",
+      },
+      "ratelimits": [
+        {
+          "name": "WRITE_LIMITER",
+          "namespace_id": "1001",
+          "simple": { "limit": 30, "period": 60 },
+        },
+      ],
+      "triggers": { "crons": ["* * * * *"] },
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "hitalk-next",
-          "database_id": "782bd54d-2e2d-4fff-9778-0e02a7d0655f",
+          "database_name": "hitalk-next-v3",
+          "database_id": "7364ec8f-3339-4e75-ab8b-40163e5b0d6b",
           "migrations_dir": "migrations",
         },
       ],

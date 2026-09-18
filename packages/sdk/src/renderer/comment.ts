@@ -2,133 +2,74 @@ import { html, nothing, type TemplateResult } from 'lit-html'
 import { repeat } from 'lit-html/directives/repeat.js'
 import { unsafeHTML } from 'lit-html/directives/unsafe-html.js'
 import type { Comment } from '@hitalk/shared'
-import { getGravatarUrl, timeAgo, getLink } from '../utils'
-
+import { getGravatarUrl, getLink, timeAgo } from '../utils'
 export interface CommentActions {
   onReply: (id: string, nick: string) => void
   onLike: (id: string) => void
   onLocate: (id: string) => void
+  onDelete: (id: string) => void
+  onMore: (id: string) => void
+  isLoading: (id: string) => boolean
 }
-
-function expandContent(event: Event) {
-  const content = event.currentTarget as HTMLElement
-  content.classList.remove('expand')
-}
-
-export function renderComment(
-  comment: Comment,
-  avatarType: string,
+function renderComment(
+  c: Comment,
+  avatar: string,
   actions: CommentActions,
-  commentsById: ReadonlyMap<string, Comment>,
-  isChild = false
+  child = false
 ): TemplateResult {
-  const parent = comment.parent_id
-    ? commentsById.get(comment.parent_id)
-    : undefined
-  return html`
-    <li class="vcard" id=${comment.id} tabindex="-1">
-      ${avatarType === 'hide' ? nothing : html`<img class="vimg" src=${getGravatarUrl(comment.avatar_hash, avatarType)} alt=${comment.nick} />`}
-      <section>
-        <div class="vhead">
-          <a
-            rel="nofollow noopener noreferrer"
-            href=${getLink(comment.website)}
-            target="_blank"
-            >${comment.nick}</a
-          >
-          ${comment.is_pinned ? html`<span class="vpin">置顶</span>` : nothing}
-          <span class="vtime">${timeAgo(comment.created_at)}</span>
-          ${
-            comment.client?.browser || comment.client?.os
-              ? html`<span class="vua" aria-label="浏览器与操作系统"
-                  >${[comment.client.browser, comment.client.os].filter(Boolean).join(' · ')}</span
-                >`
-              : nothing
-          }
-        </div>
-        ${
-          parent
-            ? html`<a
-                class="vreply-to"
-                href=${`#${encodeURIComponent(parent.id)}`}
-                @click=${(event: MouseEvent) => {
-                  event.preventDefault()
-                  actions.onLocate(parent.id)
-                }}
-                >回复 @${parent.nick}</a
-              >`
-            : nothing
-        }
-        <!-- Only the trusted Hitalk server's sanitized Markdown may enter this HTML boundary. -->
-        <div class="vcontent" @click=${expandContent}>
-          ${unsafeHTML(comment.content_html)}
-        </div>
-        <div class="vfooter">
-          <span
-            class="vlike"
-            data-id=${comment.id}
-            @click=${() => actions.onLike(comment.id)}
-          >
-            <i class="vlike-icon">❤</i
-            ><span class="vlike-count">${comment.like_count || ''}</span>
-          </span>
-          <span
-            class="vat"
-            data-id=${comment.id}
-            data-nick=${comment.nick}
-            @click=${() => actions.onReply(comment.id, comment.nick)}
-            >回复</span
-          >
-        </div>
-        ${
-          !isChild && comment.children?.length
-            ? html`
-                <div class="vchildren">
-                  <ul class="vlist">
-                    ${repeat(
-                      comment.children,
-                      child => child.id,
-                      child =>
-                        renderComment(
-                          child,
-                          avatarType,
-                          actions,
-                          commentsById,
-                          true
-                        )
-                    )}
-                  </ul>
-                </div>
-              `
-            : nothing
-        }
-        <!-- The editor owns this slot's contents; list rendering never writes into it. -->
-        <div class="hitalk-reply-slot"></div>
-      </section>
-    </li>
-  `
+  return html`<li class="vcard" id=${c.id} tabindex="-1">
+    ${avatar === 'hide' || c.deleted ? nothing : html`<img class="vimg" src=${getGravatarUrl(c.avatar_hash, avatar)} alt=${c.nick} />`}
+    <section>
+      <div class="vhead">
+        <a
+          href=${getLink(c.website)}
+          rel="nofollow noopener noreferrer"
+          target="_blank"
+          >${c.nick}</a
+        >${c.is_pinned ? html`<span class="vpin">置顶</span>` : nothing}${c.is_admin ? html`<span class="vbadge">博主</span>` : nothing}<span
+          class="vtime"
+          >${timeAgo(c.created_at)}</span
+        >${c.client ? html`<span class="vua">${[c.client.browser, c.client.os].filter(Boolean).join(' · ')}</span>` : nothing}
+      </div>
+      ${c.reply_to ? html`<button class="vreply-to" type="button" ?disabled=${!c.reply_to.available} @click=${() => actions.onLocate(c.reply_to!.id)}>回复 @${c.reply_to.nick}</button>` : nothing}
+      <div
+        class="vcontent"
+        @click=${(e: Event) => (e.currentTarget as HTMLElement).classList.remove('expand')}
+      >
+        ${c.deleted ? '该评论已删除' : unsafeHTML(c.content_html)}
+      </div>
+      ${c.status !== 'published' && !c.deleted ? html`<div class="hitalk-comment-status">${c.status === 'pending' ? '审核中' : '该评论未公开'}</div>` : nothing}
+      <div class="vmeta">
+        ${!c.deleted && c.status === 'published' ? html`<button class="vlike" type="button" aria-pressed=${String(c.liked)} @click=${() => actions.onLike(c.id)}>${c.liked ? '♥' : '♡'} <span class="vlike-count">${c.like_count}</span></button>` : nothing}${c.can_reply ? html`<button class="vat" type="button" @click=${() => actions.onReply(c.id, c.nick)}>回复</button>` : nothing}${c.can_delete ? html`<button class="vdelete" type="button" @click=${() => actions.onDelete(c.id)}>删除</button>` : nothing}
+      </div>
+      <div class="hitalk-reply-slot"></div>
+      ${
+        !child
+          ? html`<ul class="vquote">
+                ${repeat(
+                  c.replies || [],
+                  r => r.id,
+                  r => renderComment(r, avatar, actions, true)
+                )}
+              </ul>
+              ${c.reply_cursor ? html`<button class="vbtn vmore-replies" ?disabled=${actions.isLoading(c.id)} @click=${() => actions.onMore(c.id)}>${actions.isLoading(c.id) ? '正在加载…' : `查看更多回复（${c.reply_count || 0}）`}</button>` : nothing}`
+          : nothing
+      }
+    </section>
+  </li>`
 }
-
 export function renderCommentList(
   comments: Comment[],
-  avatarType: string,
+  avatar: string,
   actions: CommentActions
 ): TemplateResult {
-  const commentsById = new Map<string, Comment>()
-  const collect = (items: Comment[]) => {
-    for (const comment of items) {
-      commentsById.set(comment.id, comment)
-      if (comment.children) collect(comment.children)
-    }
-  }
-  collect(comments)
   return comments.length
     ? html`<ul class="vlist">
         ${repeat(
           comments,
-          comment => comment.id,
-          comment => renderComment(comment, avatarType, actions, commentsById)
+          c => c.id,
+          c => renderComment(c, avatar, actions)
         )}
       </ul>`
-    : html`<div class="vempty">还没有评论哦，快来抢沙发吧!</div>`
+    : html`<div class="vempty">还没有评论哦，快来抢沙发吧！</div>`
 }

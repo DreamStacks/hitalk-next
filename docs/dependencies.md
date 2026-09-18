@@ -34,7 +34,7 @@ markdown-it 15 已自带类型，但 markdown-it-emoji 的社区类型仍引用 
 
 ## User-Agent
 
-采用 [Bowser](https://github.com/bowser-js/bowser) 2.14.1，在 Workers 侧解析 UA 的浏览器和系统信息。它不进入 SDK 构建；公开接口只返回解析后的标签。保留原始 UA，方便旧评论导入后使用相同的解析规则。
+采用 [Bowser](https://github.com/bowser-js/bowser) 2.14.1，在 Workers 侧解析 UA 的浏览器和系统信息。它不进入 SDK 构建；公开接口只返回解析后的标签。原始 UA 只保留在服务端，用于生成浏览器和系统展示标签。
 
 ## 开发环境
 
@@ -66,6 +66,6 @@ lit-html 和指令均内联进 ESM/IIFE，不要求 Vue、React 或 Hexo 消费�
 - pnpm --filter @hitalk/server build：部署前 dry-run，仅打包。
 - pnpm audit --prod --registry=https://registry.npmjs.org：本次报告生产依赖已知漏洞为 0；默认镜像未提供审计接口，因此显式使用官方源。
 
-真实 D1 测试发现 Node SQLite 无法复现的深链级联删除失败。当前最大链长为 8（含根评论），测试包含底层点赞、根评论删除、整页删除和超深回复拒绝。测试使用假令牌与本地 D1，不读取开发邮件凭据。
+当前数据模型使用 root_id 和 reply_to_id，删除仅清理单条内容，避免递归级联删除深度限制。测试使用假令牌与本地 D1，不读取开发邮件凭据。
 
-SDK 自动化测试使用 jsdom；本轮另在真实浏览器中检查 ESM 产物的点赞、重排、回复目标消失和草稿保留，并修复按钮样式覆盖 hidden 的问题。这不代表完整跨浏览器兼容性或视觉验收，下一步应结合实际博客页面补验收；有持续跨浏览器回归需求时再加入 Playwright。当前无需仅为技术栈完整而新增 UI 框架、ORM、数据库服务或测试库。
+SDK 自动化测试使用 jsdom，并验证 ESM/IIFE/独立声明产物。视觉与布局由用户验收。本轮不新增 UI 框架、ORM、数据库服务或测试库。

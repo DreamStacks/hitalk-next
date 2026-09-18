@@ -1,738 +1,918 @@
 import { test, vi } from 'vitest'
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
-import app from '../apps/server/src/index.ts'
+import { app } from '../apps/server/src/index.ts'
 import { renderMarkdown } from '../apps/server/src/lib/markdown.ts'
 import { clientInfo } from '../apps/server/src/lib/user-agent.ts'
-import { buildCommentTree, hashIP } from '../apps/server/src/lib/db.ts'
-import { mailPlugin } from '../apps/server/src/plugins/mail.ts'
-import { PluginManager } from '../apps/server/src/lib/plugin-manager.ts'
+import { processNotifications } from '../apps/server/src/services/notifications.ts'
+import { digest } from '../apps/server/src/lib/auth.ts'
 import { env as bindings } from 'cloudflare:workers'
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
-
+const token = 'ht_' + 'A'.repeat(43),
+  other = 'ht_' + 'B'.repeat(43)
+const admin = { Authorization: 'Bearer test-admin' }
 function fixture(t, overrides = {}) {
-  const db = bindings.DB
   const env = { ...bindings, ...overrides }
   const context = createExecutionContext()
   t.onTestFinished(() => waitOnExecutionContext(context))
   const request = (path, init = {}) =>
-    app.request(`http://localhost${path}`, init, env, context)
-  const post = (body, headers = {}) =>
-    request('/comments', {
-      method: 'POST',
+    app.request('http://localhost' + path, init, env, context)
+  const write = async (path, body, method = 'POST', auth = token) =>
+    request(path, {
+      method,
       headers: {
         'Content-Type': 'application/json',
-        'cf-connecting-ip': '192.0.2.1',
-        ...headers,
+        Authorization: `Bearer ${auth}`,
       },
-      body: JSON.stringify(body),
+      body: body === undefined ? undefined : JSON.stringify(body),
     })
-  const create = async (extra = {}) => {
-    const response = await post({
-      path: '/article',
-      nick: 'Reader',
-      content: 'hello',
-      ...extra,
-    })
-    assert.equal(response.status, 201, await response.clone().text())
-    return response.json()
+  const input = (extra = {}) => ({
+    path: '/article',
+    nick: 'Reader',
+    content: 'hello',
+    client_request_id: crypto.randomUUID(),
+    ...extra,
+  })
+  const create = async (extra = {}, auth = token) => {
+    const res = await write('/api/comments', input(extra), 'POST', auth)
+    assert.equal(res.status, 201, await res.clone().text())
+    return res.json()
   }
-  return { db, env, request, post, create }
+  const list = async (path = '/article', auth) => {
+    const res = await request(
+      `/api/comments?path=${encodeURIComponent(path)}`,
+      auth ? { headers: { Authorization: `Bearer ${auth}` } } : {}
+    )
+    assert.equal(res.status, 200, await res.clone().text())
+    return res.json()
+  }
+  const moderate = (id, status) =>
+    write(`/api/admin/comments/${id}`, { status }, 'PATCH', 'test-admin')
+  return { env, db: env.DB, request, write, input, create, list, moderate }
 }
-
-const authorization = { Authorization: 'Bearer test-admin' }
-
-test('admin fails closed and rejects URL credentials across read and mutation routes', async t => {
-  for (const token of [undefined, '', 'test-admin']) {
-    const f = fixture(t, { ADMIN_TOKEN: token })
-    assert.equal((await f.request('/admin/api/comments')).status, 401)
-    assert.equal(
-      (await f.request('/admin/api/comments?token=test-admin')).status,
-      401
-    )
-    assert.equal(
-      (await f.request('/comments/nope', { method: 'DELETE' })).status,
-      401
-    )
-    assert.equal(
-      (await f.request('/comments/nope/pin', { method: 'PUT' })).status,
-      401
-    )
-  }
+test('public reads have no side effects; one API and safe errors', async t => {
   const f = fixture(t)
+  assert.deepEqual((await f.list()).comments, [])
   assert.equal(
-    (await f.request('/admin/api/comments', { headers: authorization })).status,
-    200
+    (
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM identities WHERE kind='visitor'")
+        .first()
+    ).n,
+    0
+  )
+  assert.equal(
+    (await f.db.prepare('SELECT COUNT(*) n FROM pages').first()).n,
+    0
+  )
+  assert.equal((await f.request('/comments?path=/article')).status, 404)
+  const res = await f.request('/api/comments?path=bad')
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).code, 'INVALID_INPUT')
+  assert.equal(
+    (await f.request('/api/comments?path=/article&limit=999')).status,
+    400
+  )
+  assert.equal((await f.request('/api/comments/count')).status, 400)
+})
+test('first creation registers one hashed identity and never exposes private fields', async t => {
+  const f = fixture(t)
+  const c = await f.create({
+    email: 'reader@example.com',
+    website: 'https://example.com',
+    notify: true,
+  })
+  assert.equal(c.can_delete, true)
+  assert.equal(c.is_admin, false)
+  const row = await f.db
+    .prepare("SELECT * FROM identities WHERE kind='visitor'")
+    .first()
+  assert.equal(row.token_hash, await digest(token))
+  assert.notEqual(row.token_hash, token)
+  const response = JSON.stringify(await f.list())
+  for (const value of [
+    'reader@example.com',
+    token,
+    row.token_hash,
+    'author_id',
+    'request_hash',
+    'content_md',
+    'client_request_id',
+  ])
+    assert.ok(!response.includes(value), value)
+  assert.equal((await f.list()).comments[0].can_delete, false)
+  assert.equal((await f.list('/article', token)).comments[0].can_delete, true)
+})
+test('concurrent first submissions and replay share one identity and comment', async t => {
+  const f = fixture(t)
+  const body = f.input()
+  const results = await Promise.all(
+    Array.from({ length: 8 }, () => f.write('/api/comments', body))
+  )
+  for (const res of results)
+    assert.equal(res.status, 201, await res.clone().text())
+  assert.equal((await f.list()).total, 1)
+  assert.equal(
+    (
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM identities WHERE kind='visitor'")
+        .first()
+    ).n,
+    1
+  )
+  const conflict = await f.write('/api/comments', {
+    ...body,
+    content: 'different',
+  })
+  assert.equal(conflict.status, 409)
+  const ids = await Promise.all(results.map(r => r.json()))
+  assert.equal(new Set(ids.map(c => c.id)).size, 1)
+})
+test('invalid input and parent roll back the whole first write', async t => {
+  const f = fixture(t)
+  for (const body of [
+    f.input({ path: '//evil' }),
+    f.input({ website: 'javascript:alert(1)' }),
+    f.input({ content: '' }),
+    f.input({ client_request_id: 'bad' }),
+    f.input({ reply_to_id: 'missing' }),
+  ])
+    assert.equal((await f.write('/api/comments', body)).status, 400)
+  assert.equal(
+    (await f.db.prepare('SELECT COUNT(*) n FROM pages').first()).n,
+    0
   )
   assert.equal(
     (
-      await f.request('/admin/api/comments', {
-        headers: { Authorization: 'test-admin' },
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM identities WHERE kind='visitor'")
+        .first()
+    ).n,
+    0
+  )
+  assert.equal(
+    (
+      await f.request('/api/comments', {
+        method: 'POST',
+        body: '{',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       })
     ).status,
-    401
-  )
-  const page = await f.request('/admin?token=DO_NOT_REFLECT')
-  assert.equal(page.headers.get('cache-control'), 'no-store')
-  assert.ok(!(await page.text()).includes('DO_NOT_REFLECT'))
-})
-
-test('public responses use an allowlist, including replies and newly created comments', async t => {
-  const f = fixture(t)
-  const root = await f.create({
-    email: 'person@example.invalid',
-    website: 'https://example.com',
-    nick: '测试',
-  })
-  await f.create({ parent_id: root.id, email: 'reply@example.invalid' })
-  const list = await (await f.request('/comments?path=/article')).json()
-  for (const comment of [
-    root,
-    list.comments[0],
-    list.comments[0].children[0],
-  ]) {
-    for (const field of ['email', 'ua', 'ip_hash', 'content_md', 'page_id'])
-      assert.ok(!(field in comment), field)
-    assert.equal(typeof comment.is_admin, 'boolean')
-    assert.equal(typeof comment.is_pinned, 'boolean')
-  }
-  assert.equal(
-    root.avatar_hash,
-    createHash('md5').update('person@example.invalid').digest('hex')
-  )
-  const unicode = await f.create({ nick: '中文昵称' })
-  assert.equal(
-    unicode.avatar_hash,
-    createHash('md5').update('中文昵称').digest('hex')
-  )
-  const admin = await (
-    await f.request('/admin/api/comments', { headers: authorization })
-  ).json()
-  assert.ok(
-    admin.comments.some(comment => comment.email === 'person@example.invalid')
-  )
-})
-
-test('avatar hashes normalize emails but preserve case in nickname fallbacks', async t => {
-  const f = fixture(t)
-  const guest = await f.create({ nick: 'Guest' })
-  const lowercaseGuest = await f.create({ nick: 'guest' })
-  const email = await f.create({
-    nick: 'Guest',
-    email: ' Person@Example.Invalid ',
-  })
-  // Historical anonymous comments use MD5("Guest"), not MD5("guest").
-  assert.equal(guest.avatar_hash, 'adb831a7fdd83dd1e2a309ce7591dff8')
-  assert.equal(lowercaseGuest.avatar_hash, '084e0343a0486ff05530df6c705c8bb4')
-  assert.equal(
-    email.avatar_hash,
-    createHash('md5').update('person@example.invalid').digest('hex')
-  )
-  const list = await (await f.request('/comments?path=/article')).json()
-  assert.equal(
-    list.comments.find(comment => comment.id === guest.id).avatar_hash,
-    guest.avatar_hash
-  )
-})
-
-test('invalid inputs return 400, oversized bodies 413, without writing pages', async t => {
-  const f = fixture(t)
-  const base = { path: '/article', nick: 'Reader', content: 'hello' }
-  for (const input of [
-    null,
-    [],
-    1,
-    { ...base, nick: {} },
-    { ...base, content: ' ' },
-    { ...base, content: 'a'.repeat(20001) },
-    { ...base, nick: 'a'.repeat(81) },
-    { ...base, email: 'invalid' },
-    { ...base, website: 'javascript:alert(1)' },
-    { ...base, website: 'https://user:password@example.com' },
-    { ...base, path: '//other.example' },
-    { ...base, path: '/post?token=x' },
-    { ...base, parent_id: 123 },
-  ]) {
-    assert.equal(
-      (await f.post(input)).status,
-      400,
-      JSON.stringify(input).slice(0, 150)
-    )
-  }
-  assert.equal(
-    (await f.request('/comments', { method: 'POST', body: '{' })).status,
     400
   )
   assert.equal(
-    (await f.post({ ...base, content: 'x'.repeat(140000) })).status,
+    (await f.write('/api/comments', f.input({ content: 'x'.repeat(140000) })))
+      .status,
     413
   )
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM pages').first()).total,
-    0
-  )
 })
-
-test('GET is read-only, pagination parameters and batch size are bounded', async t => {
-  const f = fixture(t)
-  const response = await f.request('/comments?path=/new')
-  assert.equal(response.status, 200)
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM pages').first()).total,
-    0
-  )
-  for (const query of ['pageSize=0', 'pageSize=51', 'page=-1', 'page=1.5'])
-    assert.equal((await f.request(`/comments?path=/new&${query}`)).status, 400)
+test('reply constraints reject cross-page roots and immutable relationships', async t => {
+  const f = fixture(t),
+    root = await f.create()
   assert.equal(
     (
-      await f.request(
-        '/comments/count?' + Array(51).fill('paths[]=/new').join('&')
+      await f.write(
+        '/api/comments',
+        f.input({ path: '/elsewhere', reply_to_id: root.id })
       )
     ).status,
     400
   )
-})
-
-test('cross-page and missing parents are rejected by routes and database constraints', async t => {
-  const f = fixture(t)
-  const root = await f.create()
-  assert.equal(
-    (
-      await f.post({
-        path: '/other',
-        nick: 'Other',
-        content: 'reply',
-        parent_id: root.id,
-      })
-    ).status,
-    400
-  )
-  assert.equal(
-    (
-      await f.post({
-        path: '/article',
-        nick: 'Other',
-        content: 'reply',
-        parent_id: 'missing',
-      })
-    ).status,
-    400
-  )
-  await f.db.prepare("INSERT INTO pages(path) VALUES('/other')").run()
+  let parent = root
+  for (let i = 0; i < 12; i++)
+    parent = await f.create({ reply_to_id: parent.id, content: `reply ${i}` })
+  assert.equal(parent.root_id, root.id)
   await assert.rejects(
     () =>
       f.db
-        .prepare(
-          `INSERT INTO comments(id,page_id,parent_id,nick,content_md) VALUES('cross',2,?,'x','x')`
-        )
-        .bind(root.id)
-        .run(),
-    /invalid_parent/
-  )
-  await assert.rejects(
-    () =>
-      f.db
-        .prepare('UPDATE comments SET parent_id = id WHERE id = ?')
-        .bind(root.id)
+        .prepare('UPDATE comments SET root_id=NULL WHERE id=?')
+        .bind(parent.id)
         .run(),
     /immutable/
   )
+  const list = await f.list()
+  assert.equal(list.comments[0].reply_count, 12)
+  assert.equal(list.comments[0].replies.length, 3)
+  assert.ok(list.comments[0].reply_cursor)
 })
-
-test('cascade deletion keeps all counters and likes consistent', async t => {
-  const f = fixture(t)
-  const root = await f.create()
-  const child = await f.create({ parent_id: root.id })
-  await f.create({ parent_id: child.id })
-  const kept = await f.create()
-  await f.request(`/comments/${child.id}/like`, { method: 'POST' })
+test('like and unlike are idempotent by identity, including concurrent requests', async t => {
+  const f = fixture(t),
+    c = await f.create()
+  const results = await Promise.all(
+    Array.from({ length: 5 }, () =>
+      f.write(`/api/comments/${c.id}/like`, undefined, 'PUT', other)
+    )
+  )
+  for (const res of results)
+    assert.equal(res.status, 200, await res.clone().text())
+  let data = await f.list('/article', other)
+  assert.equal(data.comments[0].like_count, 1)
+  assert.equal(data.comments[0].liked, true)
+  await f.write(`/api/comments/${c.id}/like`, undefined, 'PUT', token)
+  assert.equal((await f.list()).comments[0].like_count, 2)
+  await f.write(`/api/comments/${c.id}/like`, undefined, 'DELETE', other)
+  await f.write(`/api/comments/${c.id}/like`, undefined, 'DELETE', other)
+  data = await f.list('/article', other)
+  assert.equal(data.comments[0].like_count, 1)
+  assert.equal(data.comments[0].liked, false)
   assert.equal(
-    (await f.db.prepare('SELECT comment_count FROM pages').first())
-      .comment_count,
-    4
+    (await f.write('/api/comments/missing/like', undefined, 'PUT', other))
+      .status,
+    404
+  )
+})
+test('author deletion erases personal content but preserves other replies and retry tombstone', async t => {
+  const f = fixture(t),
+    body = f.input({ email: 'private@example.com' }),
+    res = await f.write('/api/comments', body),
+    root = await res.json()
+  const child = await f.create({ reply_to_id: root.id }, other)
+  assert.equal(
+    (await f.write(`/api/comments/${root.id}`, undefined, 'DELETE', other))
+      .status,
+    403
   )
   assert.equal(
-    (
-      await f.request(`/comments/${root.id}`, {
-        method: 'DELETE',
-        headers: authorization,
-      })
-    ).status,
+    (await f.write(`/api/comments/${root.id}`, undefined, 'DELETE')).status,
     200
   )
   assert.equal(
-    (await f.db.prepare('SELECT comment_count FROM pages').first())
-      .comment_count,
-    1
+    (await f.write(`/api/comments/${root.id}`, undefined, 'DELETE')).status,
+    200
   )
-  assert.deepEqual(
-    (await f.db.prepare('SELECT id FROM comments').all()).results.map(
-      row => row.id
-    ),
-    [kept.id]
-  )
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM comment_likes').first())
-      .total,
-    0
-  )
-  assert.equal(
-    (
-      await f.request(`/comments/${root.id}`, {
-        method: 'DELETE',
-        headers: authorization,
-      })
-    ).status,
-    404
-  )
-})
-
-test('concurrent page creation and repeated likes do not duplicate counters', async t => {
-  const f = fixture(t)
-  const roots = await Promise.all(Array.from({ length: 8 }, () => f.create()))
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM pages').first()).total,
-    1
-  )
-  assert.equal(
-    (await f.db.prepare('SELECT comment_count FROM pages').first())
-      .comment_count,
-    8
-  )
-  const results = await Promise.all(
-    Array.from({ length: 8 }, async () =>
-      (
-        await f.request(`/comments/${roots[0].id}/like`, {
-          method: 'POST',
-          headers: { 'cf-connecting-ip': '192.0.2.2' },
-        })
-      ).json()
-    )
-  )
-  assert.equal(results.filter(result => result.success).length, 1)
-  assert.ok(results.every(result => result.like_count === 1))
-  assert.equal(
-    (await f.request('/comments/missing/like', { method: 'POST' })).status,
-    404
-  )
-  assert.equal(
-    (
-      await f.request('/comments/missing/pin', {
-        method: 'PUT',
-        headers: authorization,
-        body: JSON.stringify({ is_pinned: true }),
-      })
-    ).status,
-    404
-  )
-  assert.equal(
-    (
-      await f.request(`/comments/${roots[0].id}/pin`, {
-        method: 'PUT',
-        headers: authorization,
-        body: JSON.stringify({ is_pinned: 'false' }),
-      })
-    ).status,
-    400
-  )
-})
-
-test('counter and insert roll back together on database failure', async t => {
-  const f = fixture(t)
-  await f.create()
-  await f.db
-    .prepare(
-      "CREATE TRIGGER forced_failure BEFORE UPDATE OF comment_count ON pages BEGIN SELECT RAISE(ABORT, 'forced'); END"
-    )
-    .run()
-  await assert.rejects(
-    () =>
-      f.db
-        .prepare(
-          "INSERT INTO comments(id,page_id,nick,content_md) VALUES('fail',1,'x','x')"
-        )
-        .run(),
-    /forced/
-  )
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM comments').first())
-      .total,
-    1
-  )
-  assert.equal(
-    (await f.db.prepare('SELECT comment_count FROM pages').first())
-      .comment_count,
-    1
-  )
-})
-
-test('root pagination includes nested replies and preserves pinned ordering', async t => {
-  const f = fixture(t)
-  const roots = await Promise.all([f.create(), f.create(), f.create()])
-  const child = await f.create({ parent_id: roots[0].id })
-  await f.create({ parent_id: child.id })
-  await f.request(`/comments/${roots[0].id}/pin`, {
-    method: 'PUT',
-    headers: authorization,
-    body: JSON.stringify({ is_pinned: true }),
-  })
-  const first = await (
-    await f.request('/comments?path=/article&pageSize=1')
-  ).json()
-  assert.equal(first.comments[0].id, roots[0].id)
-  assert.equal(first.comments[0].children.length, 2)
-  assert.equal(first.total, 5)
-  assert.equal(first.pagination.has_more, true)
-  const ids = []
-  for (let page = 1; page <= 3; page++) {
-    const result = await (
-      await f.request(`/comments?path=/article&pageSize=1&page=${page}`)
-    ).json()
-    ids.push(result.comments[0].id)
-    assert.equal(result.pagination.has_more, page < 3)
-  }
-  assert.equal(new Set(ids).size, 3)
-})
-
-test('Markdown strips active HTML, preserves formatting and emoji', () => {
-  const html = renderMarkdown(
-    '<script>alert(1)</script>\n\n![x](javascript:alert(1))\n\n**safe** @(呵呵)'
-  )
-  assert.ok(!html.includes('<script>'))
-  assert.ok(!html.includes('src="javascript:'))
-  assert.ok(html.includes('<strong>safe</strong>'))
-  assert.ok(html.includes('class="biaoqing newpaopao"'))
-})
-
-test('Markdown preserves tables, alignment, rules and ordered-list start without allowing arbitrary HTML', () => {
-  const html = renderMarkdown(
-    '| Left | Right |\n| :--- | ---: |\n| **one** | two |\n\n---\n\n3. third\n4. fourth\n\n<table onclick="alert(1)"><tr><td>raw</td></tr></table>'
-  )
-  assert.match(html, /<table>/)
-  assert.match(html, /<th align="left">Left<\/th>/)
-  assert.match(html, /<td align="right">two<\/td>/)
-  assert.match(html, /<strong>one<\/strong>/)
-  assert.match(html, /<hr\s*\/?>/)
-  assert.match(html, /<ol start="3">/)
-  assert.ok(!html.includes('<table onclick'))
-  assert.ok(!html.includes('style='))
-})
-
-test('Markdown web links open safely in another tab while comment anchors remain local', () => {
-  const html = renderMarkdown(
-    '[external](https://example.com) [relative](/post/) [cdn](//example.com) [parent](#parent) [email](mailto:reader@example.com)'
-  )
-  for (const href of ['https://example.com', '/post/', '//example.com'])
-    assert.ok(
-      html.includes(
-        `href="${href}" target="_blank" rel="nofollow noopener noreferrer"`
-      )
-    )
-  assert.ok(html.includes('<a href="#parent">parent</a>'))
-  assert.ok(html.includes('<a href="mailto:reader@example.com">email</a>'))
-})
-
-test('path aliases share the same page, reply ownership and canonical counter keys', async t => {
-  const f = fixture(t)
-  const root = await f.create({ path: '/posts/index.html' })
-  await f.create({ path: '/posts/index.htm', parent_id: root.id })
-  for (const path of ['/posts/', '/posts/index.html', '/posts/index.htm']) {
-    const response = await f.request(
-      `/comments?path=${encodeURIComponent(path)}`
-    )
-    assert.equal(response.status, 200)
-    const body = await response.json()
-    assert.equal(body.page_info.path, '/posts/')
-    assert.equal(body.total, 2)
-    assert.equal(body.comments[0].children[0].parent_id, root.id)
-  }
-  const counts = await (
-    await f.request(
-      '/comments/count?paths[]=/posts/index.html&paths[]=/posts/&paths[]=/posts/index.htm&paths[]=/missing/index.html'
-    )
-  ).json()
-  assert.deepEqual(counts, { '/posts/': 2, '/missing/': 0 })
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS total FROM pages').first()).total,
-    1
-  )
-  for (const path of ['/posts/?draft=1', '/posts/#more']) {
-    assert.equal(
-      (await f.request(`/comments?path=${encodeURIComponent(path)}`)).status,
-      400
-    )
-    assert.equal(
-      (await f.request(`/comments/count?paths[]=${encodeURIComponent(path)}`))
-        .status,
-      400
-    )
-    assert.equal(
-      (await f.post({ path, nick: 'Reader', content: 'hello' })).status,
-      400
-    )
-  }
-})
-
-test('IP identifiers are keyed and stable; different installations cannot correlate them', async () => {
-  assert.equal(
-    await hashIP('192.0.2.1', 'salt-a'),
-    await hashIP('192.0.2.1', 'salt-a')
-  )
-  assert.notEqual(
-    await hashIP('192.0.2.1', 'salt-a'),
-    await hashIP('192.0.2.1', 'salt-b')
-  )
-})
-
-test('tree builder terminates safely on malformed cycles', () => {
-  const tree = buildCommentTree([
-    { id: 'a', parent_id: 'b' },
-    { id: 'b', parent_id: 'a' },
-  ])
-  assert.equal(tree.length, 2)
-})
-
-test('mail escapes metadata and plugin failures do not stop other plugins', async t => {
-  const sent = []
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
-    sent.push(JSON.parse(init.body))
-    return new Response('{}')
-  })
-  const f = fixture(t)
-  const root = await f.create({
-    nick: '<img src=x onerror=alert(1)>',
-    title: '<b>title</b>',
-  })
+  const data = await f.list()
+  assert.equal(data.total, 1)
+  assert.equal(data.comments[0].deleted, true)
+  assert.equal(data.comments[0].replies[0].id, child.id)
   const row = await f.db
     .prepare('SELECT * FROM comments WHERE id=?')
     .bind(root.id)
     .first()
-  const page = await f.db.prepare('SELECT * FROM pages').first()
-  await mailPlugin.onCommentCreated(
-    {
-      env: {
-        RESEND_API_KEY: 'test',
-        ADMIN_EMAIL: 'owner@example.invalid',
-        EMAIL_FROM: 'Blog <mail@example.invalid>',
-        SITE_URL: 'https://example.com',
-      },
-    },
-    row,
-    page
+  assert.equal(row.email, null)
+  assert.equal(row.content_md, null)
+  const replay = await f.write('/api/comments', body)
+  assert.equal(replay.status, 201)
+  assert.equal((await replay.json()).deleted, true)
+  assert.equal(
+    (await f.write(`/api/comments/${root.id}/like`, undefined, 'PUT')).status,
+    404
   )
-  assert.equal(sent.length, 1)
-  assert.ok(sent[0].html.includes('&lt;img'))
-  assert.ok(!sent[0].html.includes('<b>title</b>'))
-  const plugins = new PluginManager()
-  const calls = []
-  plugins.register({
-    name: 'fail',
-    onCommentCreated() {
-      throw new Error('expected test failure')
-    },
-  })
-  plugins.register({
-    name: 'ok',
-    onCommentCreated() {
-      calls.push('ok')
-    },
-  })
-  vi.spyOn(console, 'error').mockImplementation(() => {})
-  await plugins.commentCreated({}, row, page)
-  assert.deepEqual(calls, ['ok'])
+  assert.equal(
+    (await f.write('/api/comments', f.input({ reply_to_id: root.id }))).status,
+    400
+  )
+  await f.create({ reply_to_id: child.id })
+  assert.equal((await f.list()).total, 2)
 })
-
-test('database limits reply depth and stores only necessary comment data', async t => {
-  const f = fixture(t)
-  await f.db.prepare("INSERT INTO pages(path) VALUES('/deep')").run()
-  for (let depth = 0; depth < 8; depth++) {
-    await f.db
-      .prepare(
-        'INSERT INTO comments(id,page_id,parent_id,nick,content_md) VALUES(?,1,?,?,?)'
-      )
-      .bind(
-        `depth-${depth}`,
-        depth === 0 ? null : `depth-${depth - 1}`,
-        'Reader',
-        'hello'
-      )
-      .run()
-  }
-  await assert.rejects(
-    () =>
-      f.db
-        .prepare(
-          "INSERT INTO comments(id,page_id,parent_id,nick,content_md) VALUES('too-deep',1,'depth-7','Reader','hello')"
-        )
-        .run(),
-    /reply_depth_exceeded/
+test('pending private receipt, moderation, hidden threads and counts are consistent', async t => {
+  const f = fixture(t, { MODERATION_MODE: 'pre' }),
+    c = await f.create()
+  assert.equal(c.status, 'pending')
+  assert.equal((await f.list()).total, 0)
+  const mine = await f.request('/api/me/comments?path=/article', {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  assert.equal((await mine.json()).comments[0].id, c.id)
+  assert.equal((await f.request(`/api/comments/${c.id}/context`)).status, 404)
+  assert.equal((await f.moderate(c.id, 'published')).status, 200)
+  assert.equal((await f.list()).total, 1)
+  const child = await f.create({ reply_to_id: c.id })
+  await f.moderate(child.id, 'published')
+  const grand = await f.create({ reply_to_id: child.id })
+  await f.moderate(grand.id, 'published')
+  await f.moderate(child.id, 'hidden')
+  let data = await f.list()
+  assert.equal(data.total, 2)
+  assert.equal(data.comments[0].replies[0].reply_to.available, false)
+  await f.moderate(c.id, 'hidden')
+  assert.equal((await f.list()).total, 0)
+  assert.equal((await f.request(`/api/threads/${c.id}/replies`)).status, 404)
+  await f.moderate(c.id, 'published')
+  assert.equal((await f.list()).total, 2)
+  const counts = await f.request(
+    '/api/comments/count?paths[]=/article&paths[]=/empty'
   )
-  await f.db
-    .prepare(
-      "INSERT INTO comment_likes(comment_id,ip_hash) VALUES('depth-7','test')"
+  assert.deepEqual(await counts.json(), { '/article': 2, '/empty': 0 })
+})
+test('root cursors freeze creation order across new posts and pin changes', async t => {
+  const f = fixture(t)
+  const roots = []
+  for (let i = 0; i < 5; i++)
+    roots.push(await f.create({ content: `root ${i}` }))
+  let response = await f.request('/api/comments?path=/article&limit=2')
+  let page = await response.json()
+  assert.deepEqual(
+    page.comments.map(c => c.id),
+    [roots[4].id, roots[3].id]
+  )
+  await f.create()
+  await f.write(
+    `/api/admin/comments/${roots[0].id}`,
+    { is_pinned: true },
+    'PATCH',
+    'test-admin'
+  )
+  response = await f.request(
+    `/api/comments?path=/article&limit=2&cursor=${encodeURIComponent(page.next_cursor)}`
+  )
+  page = await response.json()
+  assert.deepEqual(
+    page.comments.map(c => c.id),
+    [roots[2].id, roots[1].id]
+  )
+  assert.equal(
+    (
+      await f.request(
+        `/api/comments?path=/wrong&cursor=${encodeURIComponent(page.next_cursor)}`
+      )
+    ).status,
+    400
+  )
+  assert.equal(
+    (await f.request('/api/comments?path=/article&cursor=bad')).status,
+    400
+  )
+})
+test('reply pages and context are bounded and locate unloaded parents', async t => {
+  const f = fixture(t),
+    root = await f.create()
+  const replies = []
+  for (let i = 0; i < 9; i++)
+    replies.push(
+      await f.create({ reply_to_id: i ? replies[i - 1].id : root.id })
     )
-    .run()
-  const columns = (
-    await f.db.prepare('PRAGMA table_info(comments)').all()
-  ).results.map(row => row.name)
-  assert.ok(columns.includes('ua'))
-  for (const removed of ['content_html', 'ip_hash'])
-    assert.ok(!columns.includes(removed))
-  const rejected = await f.post({
-    path: '/deep',
-    nick: 'Reader',
-    content: 'too deep',
-    parent_id: 'depth-7',
-  })
-  assert.equal(rejected.status, 400)
-  await f.db.prepare("DELETE FROM comments WHERE id='depth-0'").run()
+  const preview = (await f.list()).comments[0]
+  const response = await f.request(
+    `/api/threads/${root.id}/replies?limit=2&cursor=${encodeURIComponent(preview.reply_cursor)}`
+  )
+  const page = await response.json()
+  assert.deepEqual(
+    page.comments.map(c => c.id),
+    [replies[3].id, replies[4].id]
+  )
+  assert.ok(page.next_cursor)
+  const context = await (
+    await f.request(`/api/comments/${replies[7].id}/context`)
+  ).json()
+  assert.ok(context.root.replies.some(c => c.id === replies[7].id))
   assert.equal(
-    (await f.db.prepare('SELECT comment_count FROM pages').first())
-      .comment_count,
-    0
+    context.root.replies.find(c => c.id === replies[7].id).reply_to.id,
+    replies[6].id
+  )
+  const otherRoot = await f.create()
+  assert.equal(
+    (
+      await f.request(
+        `/api/threads/${otherRoot.id}/replies?cursor=${encodeURIComponent(page.next_cursor)}`
+      )
+    ).status,
+    400
   )
 })
-
-test('deleting a page at the maximum reply depth also removes its likes', async t => {
-  const f = fixture(t)
-  let parent
-  for (let depth = 0; depth < 8; depth++)
-    parent = await f.create({ parent_id: parent?.id })
-  await f.request(`/comments/${parent.id}/like`, { method: 'POST' })
-  await f.db.prepare('DELETE FROM pages').run()
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS count FROM comments').first())
-      .count,
-    0
-  )
-  assert.equal(
-    (await f.db.prepare('SELECT COUNT(*) AS count FROM comment_likes').first())
-      .count,
-    0
-  )
-})
-
-test('shared validation normalizes optional inputs and rejects overlong metadata', async t => {
-  const f = fixture(t)
-  const normalized = await f.create({
-    nick: '  Reader  ',
-    content: '  hello  ',
-    email: '   ',
-    website: '  https://example.com  ',
-  })
-  assert.equal(normalized.nick, 'Reader')
-  assert.equal(normalized.website, 'https://example.com/')
-  for (const extra of [
-    { title: 'x'.repeat(201) },
-    { parent_id: 'x'.repeat(129) },
-    { path: '/' + 'x'.repeat(1024) },
-    { website: 'https://' },
-  ]) {
+test('admin is independent of visitor credentials and fails closed', async t => {
+  const f = fixture(t),
+    c = await f.create()
+  for (const path of ['/api/admin/comments', '/api/admin/notifications']) {
+    assert.equal((await f.request(path)).status, 401)
     assert.equal(
-      (
-        await f.post({
-          path: '/article',
-          nick: 'Reader',
-          content: 'hello',
-          ...extra,
-        })
-      ).status,
-      400
+      (await f.request(path, { headers: { Authorization: `Bearer ${token}` } }))
+        .status,
+      401
     )
+    assert.equal((await f.request(path + '?token=test-admin')).status, 401)
+  }
+  assert.equal(
+    (await f.request('/api/admin/comments', { headers: admin })).status,
+    200
+  )
+  const otherEnv = fixture(t, { ADMIN_TOKEN: undefined })
+  assert.equal(
+    (await otherEnv.request('/api/admin/comments', { headers: admin })).status,
+    401
+  )
+  const own = await f.write(
+    '/api/admin/comments',
+    f.input(),
+    'POST',
+    'test-admin'
+  )
+  assert.equal((await own.json()).is_admin, true)
+  assert.equal(
+    (
+      await f.write(
+        `/api/admin/comments/${c.id}`,
+        undefined,
+        'DELETE',
+        'test-admin'
+      )
+    ).status,
+    200
+  )
+})
+test('blocking an identity rejects replay, likes and new registration of the same token', async t => {
+  const f = fixture(t),
+    c = await f.create()
+  const actor = await f.db
+    .prepare('SELECT id FROM identities WHERE token_hash=?')
+    .bind(await digest(token))
+    .first()
+  assert.equal(
+    (
+      await f.write(
+        `/api/admin/identities/${actor.id}`,
+        { status: 'blocked' },
+        'PATCH',
+        'test-admin'
+      )
+    ).status,
+    200
+  )
+  assert.equal((await f.write('/api/comments', f.input())).status, 403)
+  assert.equal(
+    (await f.write(`/api/comments/${c.id}/like`, undefined, 'PUT')).status,
+    403
+  )
+  assert.equal(
+    (await f.write(`/api/comments/${c.id}`, undefined, 'DELETE')).status,
+    403
+  )
+})
+test('per-page and global close switches preserve reads', async t => {
+  const f = fixture(t)
+  await f.create()
+  assert.equal(
+    (
+      await f.write(
+        '/api/admin/pages',
+        { path: '/article', comments_enabled: false },
+        'PATCH',
+        'test-admin'
+      )
+    ).status,
+    200
+  )
+  assert.equal((await f.write('/api/comments', f.input())).status, 403)
+  assert.equal((await f.list()).comments_enabled, false)
+  const closed = fixture(t, { COMMENTS_ENABLED: 'false' })
+  assert.equal(
+    (await closed.write('/api/comments', closed.input({ path: '/other' })))
+      .status,
+    403
+  )
+})
+test('rate limits fail closed, expose retry headers and do not write identities', async t => {
+  const f = fixture(t, {
+    RATE_LIMIT_ENABLED: 'true',
+    WRITE_LIMITER: { limit: async () => ({ success: false }) },
+  })
+  const res = await f.write('/api/comments', f.input())
+  assert.equal(res.status, 429)
+  assert.equal(res.headers.get('Retry-After'), '60')
+  assert.equal(
+    (
+      await f.db
+        .prepare("SELECT COUNT(*) n FROM identities WHERE kind='visitor'")
+        .first()
+    ).n,
+    0
+  )
+  const missing = fixture(t, {
+    RATE_LIMIT_ENABLED: 'true',
+    WRITE_LIMITER: undefined,
+  })
+  assert.equal(
+    (await missing.write('/api/comments', missing.input())).status,
+    503
+  )
+  const allowed = fixture(t, {
+    RATE_LIMIT_ENABLED: 'true',
+    WRITE_LIMITER: { limit: async () => ({ success: true }) },
+  })
+  await allowed.create()
+})
+test('Markdown, avatar and UA remain safe public display values', async t => {
+  const f = fixture(t),
+    res = await f.write(
+      '/api/comments',
+      f.input({
+        nick: '<img onerror=alert(1)>',
+        email: ' A@example.com ',
+        content:
+          '<script>alert(1)</script>\n[link](https://example.com)\n\n|a|b|\n|-|-|\n|1|2|',
+      })
+    )
+  assert.equal(res.status, 201)
+  const c = await res.json()
+  assert.ok(!c.content_html.includes('<script>'))
+  assert.match(c.content_html, /nofollow/)
+  assert.match(c.content_html, /<table>/)
+  assert.equal(clientInfo(null), undefined)
+  assert.ok(
+    renderMarkdown('![bad](javascript:alert(1))').indexOf('src="javascript:') <
+      0
+  )
+})
+test('notifications are committed once, leased and retried without leaking payload', async t => {
+  const config = {
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'Hitalk <noreply@example.com>',
+    ADMIN_EMAIL: 'owner@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  // Do not enable mail in request context; enqueue in a controlled create call below.
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = { ...f.env, ...config }
+  const body = f.input()
+  await createComment(env, await digest(token), body, 'test')
+  await createComment(env, await digest(token), body, 'test')
+  assert.equal(
+    (await f.db.prepare('SELECT COUNT(*) n FROM notification_jobs').first()).n,
+    1
+  )
+  const send = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}', { status: 503 }))
+  await processNotifications(env)
+  let job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.status, 'pending')
+  assert.equal(job.attempts, 1)
+  send.mockResolvedValue(new Response('{}', { status: 200 }))
+  await Promise.all([
+    processNotifications(env, job.next_attempt_at + 1),
+    processNotifications(env, job.next_attempt_at + 1),
+  ])
+  job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.status, 'sent')
+  assert.equal(send.mock.calls.length, 2)
+  assert.ok(send.mock.calls[0][1].headers['Idempotency-Key'])
+})
+test('notification deliveries preserve original owner/reply copy, inline styles and quoted context', async t => {
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'Blog <comments@example.com>',
+    EMAIL_NAME: '我的博客',
+    ADMIN_EMAIL: 'owner@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  const title = '文章 <img src=x onerror=alert(1)>'
+  const root = await f.create({
+    title,
+    nick: '小明 & 读者',
+    content: '**原评论**\n\n@(哈哈)',
+    email: 'reader@example.com',
+    notify: true,
+  })
+  const reply = await createComment(
+    env,
+    await digest(other),
+    f.input({
+      reply_to_id: root.id,
+      nick: '<script>昵称</script>',
+      content:
+        '**新回复**\n\n<script>alert(1)</script>\n\n```js\nconst answer = 42\n```',
+    }),
+    undefined
+  )
+  const send = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}', { status: 200 }))
+  await processNotifications(env)
+  const messages = send.mock.calls.map(([url, init]) => {
+    assert.equal(url, 'https://api.resend.com/emails')
+    assert.equal(init.headers.Authorization, 'Bearer fake')
+    return JSON.parse(init.body)
+  })
+  assert.equal(messages.length, 2)
+  const owner = messages.find(message => message.to === env.ADMIN_EMAIL)
+  const reader = messages.find(message => message.to === 'reader@example.com')
+  assert.equal(owner.subject, `[我的博客] 👉 咚！「${title}」有新评论了`)
+  assert.equal(
+    reader.subject,
+    `[我的博客] 👉 叮咚！「${title}」上评论有了新回复`
+  )
+  assert.ok(owner.html.includes('上有一条新评论，内容如下：'))
+  assert.ok(owner.html.includes('点击前往查看'))
+  assert.ok(!owner.html.includes('你的评论：'))
+  assert.ok(reader.html.includes('您(小明 &amp; 读者)'))
+  assert.ok(reader.html.includes('你的评论：'))
+  assert.ok(reader.html.includes('<strong>原评论</strong>'))
+  assert.ok(reader.html.includes('查看回复的完整內容'))
+  assert.ok(reader.html.includes('newpaopao/哈哈@2x.png'))
+  for (const message of messages) {
+    assert.equal(message.from, env.EMAIL_FROM)
+    assert.ok(message.html.includes('border-top:2px solid #12ADDB'))
+    assert.ok(message.html.includes('max-width:500px'))
+    assert.ok(message.html.includes('background-color:#f5f5f5'))
+    assert.ok(message.html.includes('<strong>新回复</strong>'))
+    assert.ok(message.html.includes('<pre style="white-space:pre-wrap;'))
+    assert.ok(message.html.includes('&lt;script&gt;昵称&lt;/script&gt;'))
+    assert.ok(!message.html.includes('<script>'))
+    assert.ok(!message.html.includes('<img src=x'))
+    assert.ok(
+      message.html.includes(`href="https://example.com/article#${reply.id}"`)
+    )
+    assert.ok(message.html.includes('本邮件为系统自动发送，请勿直接回复。'))
+    assert.match(
+      message.html,
+      /href="https:\/\/api\.example\.com\/api\/notifications\/unsubscribe\/[0-9a-f-]+"/
+    )
+    assert.ok(message.text.includes(`https://example.com/article#${reply.id}`))
+    assert.ok(message.text.includes('停止邮件通知：'))
+  }
+  assert.ok(reader.text.includes('**原评论**'))
+})
+
+test('hidden reply context cancels notification rather than quoting moderated content', async t => {
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const root = await f.create()
+  const parent = await f.create({
+    reply_to_id: root.id,
+    email: 'reader@example.com',
+    notify: true,
+  })
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'comments@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  await createComment(
+    env,
+    await digest(other),
+    f.input({ reply_to_id: parent.id }),
+    undefined
+  )
+  await f.moderate(parent.id, 'hidden')
+  const send = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}'))
+  await processNotifications(env)
+  assert.equal(send.mock.calls.length, 0)
+  assert.equal(
+    (await f.db.prepare('SELECT status FROM notification_jobs').first()).status,
+    'cancelled'
+  )
+})
+
+test('hidden/deleted notifications cancel, subscriptions can opt out', async t => {
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'x@example.com',
+    ADMIN_EMAIL: 'owner@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  const c = await createComment(env, await digest(token), f.input(), 'test')
+  const job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(
+    (
+      await f.request(`/api/notifications/unsubscribe/${job.id}`, {
+        method: 'POST',
+      })
+    ).status,
+    200
+  )
+  const send = vi.spyOn(globalThis, 'fetch')
+  await processNotifications(env)
+  assert.equal(send.mock.calls.length, 0)
+  await f.moderate(c.id, 'hidden')
+  assert.equal(
+    (await f.db.prepare('SELECT status FROM notification_jobs').first()).status,
+    'cancelled'
+  )
+})
+
+test('large threads return bounded previews and preserve a complete cursor traversal', async t => {
+  const f = fixture(t),
+    root = await f.create()
+  const row = await f.db
+    .prepare('SELECT * FROM comments WHERE id=?')
+    .bind(root.id)
+    .first()
+  for (let batch = 0; batch < 10; batch++)
+    await f.db.batch(
+      Array.from({ length: 100 }, (_, i) => {
+        const n = batch * 100 + i
+        return f.db
+          .prepare(
+            'INSERT INTO comments(id,page_id,author_id,root_id,reply_to_id,client_request_id,request_hash,nick,content_md) VALUES(?,?,?,?,?,?,?,?,?)'
+          )
+          .bind(
+            `bulk-${n}`,
+            row.page_id,
+            row.author_id,
+            root.id,
+            root.id,
+            `bulk-${n}`,
+            'fixture',
+            'Reader',
+            'reply'
+          )
+      })
+    )
+  const data = await f.list()
+  assert.equal(data.total, 1001)
+  assert.equal(data.comments[0].replies.length, 3)
+  assert.equal(data.comments[0].reply_count, 1000)
+  const first = await (
+    await f.request(`/api/threads/${root.id}/replies?limit=50`)
+  ).json()
+  assert.equal(first.comments.length, 50)
+  assert.ok(first.next_cursor)
+  const next = await (
+    await f.request(
+      `/api/threads/${root.id}/replies?limit=50&cursor=${encodeURIComponent(first.next_cursor)}`
+    )
+  ).json()
+  assert.equal(next.comments.length, 50)
+  assert.equal(
+    new Set([...first.comments, ...next.comments].map(c => c.id)).size,
+    100
+  )
+})
+
+test('notification payload is stable across configuration changes; all recipient data erases on author delete', async t => {
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'a@example.com',
+    ADMIN_EMAIL: 'owner@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  const root = await f.create({ email: 'reader@example.com', notify: true })
+  const reply = await createComment(
+    env,
+    await digest(other),
+    f.input({ reply_to_id: root.id }),
+    undefined
+  )
+  assert.equal(
+    (await f.db.prepare('SELECT COUNT(*) n FROM notification_jobs').first()).n,
+    2
+  )
+  const send = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response('{}', { status: 503 }))
+  await processNotifications(env)
+  const originals = new Map(
+    send.mock.calls.map(([, init]) => [
+      init.headers['Idempotency-Key'],
+      init.body,
+    ])
+  )
+  send.mockClear()
+  // Retries must reuse the original quote as well as the original sender.
+  await f.db
+    .prepare('UPDATE comments SET content_md=? WHERE id=?')
+    .bind('changed after first attempt', root.id)
+    .run()
+  const jobs = await f.db.prepare('SELECT * FROM notification_jobs').all()
+  await processNotifications(
+    { ...env, EMAIL_FROM: 'changed@example.com' },
+    Math.max(...jobs.results.map(j => j.next_attempt_at)) + 1
+  )
+  for (const [, init] of send.mock.calls)
+    assert.equal(init.body, originals.get(init.headers['Idempotency-Key']))
+  assert.equal(
+    (await f.write(`/api/comments/${reply.id}`, undefined, 'DELETE', other))
+      .status,
+    200
+  )
+  const removed = await f.db
+    .prepare('SELECT recipient,payload_json,status FROM notification_jobs')
+    .all()
+  for (const job of removed.results) {
+    assert.equal(job.recipient, null)
+    assert.equal(job.payload_json, null)
+    assert.equal(job.status, 'cancelled')
   }
 })
 
-test.each([
-  '[link](javascript:alert(1))',
-  '[link](jav&#x61;script:alert(1))',
-  '![image](data:text/html,<script>alert(1)</script>)',
-  '<svg onload=alert(1)>',
-])('Markdown upgrade does not activate hostile input: %s', source => {
-  const html = renderMarkdown(source)
-  assert.ok(!/<(?:script|svg|iframe)\b/i.test(html))
-  assert.ok(!/(?:href|src)=["'](?:javascript|data):/i.test(html))
+test('reply recipient deletion cancels queued child notifications without deleting child', async t => {
+  const f = fixture(t)
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'a@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  const root = await f.create({ email: 'reader@example.com', notify: true })
+  await createComment(
+    env,
+    await digest(other),
+    f.input({ reply_to_id: root.id }),
+    undefined
+  )
+  await f.write(`/api/comments/${root.id}`, undefined, 'DELETE')
+  const job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.recipient, null)
+  assert.equal(job.status, 'cancelled')
+  assert.equal((await f.list()).total, 1)
 })
 
-test('comments collect the request UA and expose parsed labels without the raw header', async t => {
+test('notification leases recover and terminal failures respect the provider idempotency window', async t => {
   const f = fixture(t)
-  const ua =
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.117 Safari/537.36'
-  const response = await f.post(
-    { path: '/ua', nick: 'Reader', content: 'hello', ua: 'spoofed body value' },
-    { 'User-Agent': ua }
-  )
-  assert.equal(response.status, 201)
-  const created = await response.json()
-  assert.deepEqual(created.client, {
-    browser: 'Chrome 66',
-    os: 'macOS 10.13.4',
-  })
-  assert.ok(!('ua' in created))
-  assert.equal(
-    (
-      await f.db
-        .prepare('SELECT ua FROM comments WHERE id = ?')
-        .bind(created.id)
-        .first()
-    ).ua,
-    ua
-  )
-  const reply = await f.post(
-    { path: '/ua', nick: 'Reply', content: 'reply', parent_id: created.id },
-    { 'User-Agent': ua }
-  )
-  assert.equal(reply.status, 201)
-  const page = await (await f.request('/comments?path=/ua')).json()
-  assert.deepEqual(page.comments[0].client, created.client)
-  assert.deepEqual(page.comments[0].children[0].client, created.client)
-  assert.ok(!('ua' in page.comments[0].children[0]))
-  // Historical imports can populate the same column without changing the API.
+  const { createComment } =
+    await import('../apps/server/src/services/comments.ts')
+  const env = {
+    ...f.env,
+    EMAIL_ENABLED: 'true',
+    RESEND_API_KEY: 'fake',
+    EMAIL_FROM: 'a@example.com',
+    ADMIN_EMAIL: 'owner@example.com',
+    SITE_URL: 'https://example.com',
+    NOTIFICATION_API_URL: 'https://api.example.com',
+  }
+  await createComment(env, await digest(token), f.input(), undefined)
+  const send = vi
+    .spyOn(globalThis, 'fetch')
+    .mockRejectedValue(new Error('network'))
+  await processNotifications(env)
+  let job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.last_error, 'delivery_unconfirmed')
+  send.mockResolvedValue(new Response('{}', { status: 400 }))
+  await processNotifications(env, job.next_attempt_at + 1)
+  job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.status, 'failed')
   await f.db
-    .prepare('UPDATE comments SET ua = NULL WHERE id = ?')
-    .bind(created.id)
+    .prepare("UPDATE notification_jobs SET status='sending',lease_until=0")
     .run()
-  const missing = await (await f.request('/comments?path=/ua')).json()
-  assert.ok(!('client' in missing.comments[0]))
+  await processNotifications(env, job.first_attempt_at + 24 * 3600000)
+  job = await f.db.prepare('SELECT * FROM notification_jobs').first()
+  assert.equal(job.last_error, 'retry_window_exceeded')
+  assert.equal(send.mock.calls.length, 2)
 })
 
-test('UA storage is bounded and unknown clients do not produce invented labels', async t => {
-  const f = fixture(t)
-  const response = await f.post(
-    { path: '/ua', nick: 'Reader', content: 'hello' },
-    { 'User-Agent': 'x'.repeat(3000) }
-  )
-  assert.equal(response.status, 201)
-  const created = await response.json()
-  assert.ok(!('client' in created))
-  assert.equal(
-    (
-      await f.db
-        .prepare('SELECT length(ua) AS size FROM comments WHERE id = ?')
-        .bind(created.id)
-        .first()
-    ).size,
-    2048
-  )
-})
-
-test.each([
-  [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0',
-    { browser: 'Microsoft Edge 140', os: 'Windows 10' },
-  ],
-  [
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
-    { browser: 'Safari 18', os: 'iOS 18.0' },
-  ],
-  [
-    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
-    { browser: 'Chrome 140', os: 'Android 14' },
-  ],
-  [
-    'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0',
-    { browser: 'Firefox 140', os: 'Linux' },
-  ],
-  [null, undefined],
-])('UA parser recognizes common clients: %s', (ua, expected) => {
-  assert.deepEqual(clientInfo(ua), expected)
+test('one thousand replies stay bounded, and locating a late reply keeps earlier pagination available', async t => {
+  const f = fixture(t),
+    root = await f.create()
+  const original = await f.db
+    .prepare('SELECT page_id,author_id FROM comments WHERE id=?')
+    .bind(root.id)
+    .first()
+  for (let batch = 0; batch < 10; batch++)
+    await f.db.batch(
+      Array.from({ length: 100 }, (_, offset) => {
+        const i = batch * 100 + offset
+        return f.db
+          .prepare(
+            'INSERT INTO comments(id,page_id,author_id,root_id,reply_to_id,client_request_id,request_hash,nick,content_md) VALUES(?,?,?,?,?,?,?,?,?)'
+          )
+          .bind(
+            `bulk-${i}`,
+            original.page_id,
+            original.author_id,
+            root.id,
+            root.id,
+            `bulk-${i}`,
+            'bulk',
+            'Reader',
+            'reply'
+          )
+      })
+    )
+  const page = await f.list()
+  assert.equal(page.total, 1001)
+  assert.equal(page.comments[0].replies.length, 3)
+  const context = await (
+    await f.request('/api/comments/bulk-999/context')
+  ).json()
+  assert.equal(context.root.replies.length, 4)
+  assert.ok(context.root.reply_cursor)
+  assert.ok(context.root.replies.some(c => c.id === 'bulk-999'))
+  const replies = await (
+    await f.request(`/api/threads/${root.id}/replies?limit=50`)
+  ).json()
+  assert.equal(replies.comments.length, 50)
+  assert.ok(replies.next_cursor)
 })

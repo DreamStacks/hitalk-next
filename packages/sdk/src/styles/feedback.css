@@ -1,45 +1,60 @@
-/* 提示始终保留 live region；空状态没有边框和占位。贴顶范围仅限当前评论区。 */
+/* Keep the live region mounted; do not reserve space when its message is empty. */
 .Hitalk .hitalk-feedback {
-  --ht-feedback-accent: var(--ht-accent);
+  --ht-feedback-accent: var(--ht-notice-info);
+  --ht-feedback-bg: var(--ht-notice-info-bg);
+  --ht-feedback-border: var(--ht-notice-info-border);
   position: sticky;
   top: var(--ht-feedback-top, 12px);
   z-index: 2;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  color: var(--ht-text);
-  font-size: 0.875rem;
+  color: var(--ht-feedback-accent);
+  font-size: 13px;
   line-height: 1.6;
 }
 
+.Hitalk .hitalk-feedback[data-kind='success'] {
+  --ht-feedback-accent: var(--ht-notice-success);
+  --ht-feedback-bg: var(--ht-notice-success-bg);
+  --ht-feedback-border: var(--ht-notice-success-border);
+}
+
+.Hitalk .hitalk-feedback[data-kind='warning'] {
+  --ht-feedback-accent: var(--ht-notice-warning);
+  --ht-feedback-bg: var(--ht-notice-warning-bg);
+  --ht-feedback-border: var(--ht-notice-warning-border);
+}
+
 .Hitalk .hitalk-feedback[data-kind='error'] {
-  --ht-feedback-accent: var(--ht-danger);
+  --ht-feedback-accent: var(--ht-notice-error);
+  --ht-feedback-bg: var(--ht-notice-error-bg);
+  --ht-feedback-border: var(--ht-notice-error-border);
 }
 
 .Hitalk .hitalk-feedback[data-visible='true'] {
   margin: 12px 0;
   padding: 12px 14px;
-  border: 1px solid var(--ht-border);
+  border: 1px solid var(--ht-feedback-border);
   border-inline-start: 3px solid var(--ht-feedback-accent);
-  border-radius: 8px;
-  background: var(--ht-bg);
+  border-radius: 6px;
+  background: var(--ht-feedback-bg);
   box-shadow: 0 3px 12px rgb(0 0 0 / 6%);
 }
 
 .Hitalk .hitalk-feedback-icon {
-  display: grid;
-  place-items: center;
+  display: block;
   flex: 0 0 22px;
+  width: 22px;
   height: 22px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  color: var(--ht-feedback-accent);
-  font-weight: 600;
-  line-height: 1;
 }
 
-.Hitalk .hitalk-feedback-icon[hidden] {
-  display: none;
+.Hitalk .hitalk-feedback[data-kind='loading'] .hitalk-feedback-icon {
+  animation: hitalk-feedback-spin 900ms linear infinite;
+}
+
+.Hitalk .hitalk-feedback[data-kind='loading'] .hitalk-feedback-icon circle {
+  opacity: 0.25;
 }
 
 .Hitalk .hitalk-status {
@@ -48,111 +63,83 @@
   overflow-wrap: anywhere;
 }
 
-.Hitalk .hitalk-retry {
-  flex: 0 0 auto;
-  min-height: 36px;
-  padding: 6px 10px;
-  font-size: 0.8125rem;
+.Hitalk .hitalk-feedback-title {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-/* 信息栏 */
+.Hitalk .hitalk-feedback-message {
+  display: block;
+}
+
+@keyframes hitalk-feedback-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.Hitalk .hitalk-retry {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
 .Hitalk .info {
-  padding: 10px 5px;
+  padding: 16px 0 0;
 }
 
 .Hitalk .count {
   color: var(--ht-header);
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 600;
 }
 
-/* 初次加载 */
-.Hitalk .vloading {
-  text-align: center;
-  padding: 20px 0;
-}
-
-.Hitalk .hitalk-loading-label {
-  display: block;
-  margin-top: 8px;
-  color: var(--ht-muted);
-  font-size: 0.8125rem;
-}
-
-.Hitalk .spinner {
-  margin: 0 auto;
-  width: 50px;
-  height: 30px;
-  text-align: center;
-  font-size: 10px;
-}
-
-.Hitalk .spinner > div {
-  background-color: var(--ht-muted);
-  height: 100%;
-  width: 6px;
-  margin-right: 1px;
-  display: inline-block;
-  animation: hitalk-spinner-stretch 1.2s infinite ease-in-out;
-}
-
-.Hitalk .spinner .r2 {
-  animation-delay: -1.1s;
-}
-
-.Hitalk .spinner .r3 {
-  animation-delay: -1s;
-}
-
-.Hitalk .spinner .r4 {
-  animation-delay: -0.9s;
-}
-
-.Hitalk .spinner .r5 {
-  animation-delay: -0.8s;
-}
-
-@keyframes hitalk-spinner-stretch {
-  0%,
-  40%,
-  100% {
-    transform: scaleY(0.4);
-  }
-
-  20% {
-    transform: scaleY(1);
-  }
-}
-
-/* 空状态 */
+.Hitalk .hitalk-loading,
 .Hitalk .vempty {
-  padding: 20px;
-  text-align: center;
+  padding: 32px 16px;
   color: var(--ht-muted);
+  font-size: 14px;
+  text-align: center;
 }
 
-/* 追加加载 */
+.Hitalk .hitalk-receipts {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px dashed var(--ht-border-dashed);
+  border-radius: 8px;
+}
+
+.Hitalk .hitalk-receipts-title {
+  margin: 0;
+  color: var(--ht-muted);
+  font-size: 12px;
+}
+
+.Hitalk .hitalk-receipts .vcard {
+  padding-top: 16px;
+}
+
+.Hitalk .hitalk-receipts .vcard:last-child > section {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.Hitalk .hitalk-comment-status {
+  margin: 8px 0;
+  color: var(--ht-muted);
+  font-size: 12px;
+}
+
 .Hitalk .hitalk-more {
-  display: block;
+  display: flex;
   min-width: 152px;
   max-width: 100%;
   min-height: 44px;
   margin: 24px auto 16px;
   background: transparent;
-  border-color: var(--ht-border);
-  transition:
-    background-color 180ms ease-out,
-    border-color 180ms ease-out,
-    color 180ms ease-out;
-}
-
-.Hitalk .hitalk-more:hover:not(:disabled) {
-  background: var(--ht-btn-bg);
 }
 
 .Hitalk .hitalk-more:disabled {
-  background: transparent;
-  border-color: var(--ht-border);
-  color: var(--ht-btn-text);
   cursor: wait;
 }

@@ -1,386 +1,598 @@
+import './styles.css'
 import { html, nothing, render } from 'lit-html'
 import { createRef, ref } from 'lit-html/directives/ref.js'
-import { normalizePagePath, type HitalkOptions } from '@hitalk/shared'
-import { HitalkAPI } from './api'
+import {
+  normalizePagePath,
+  isValidEmail,
+  isValidWebsite,
+  type Comment,
+  type CommentCreateRequest,
+  type HitalkOptions,
+} from '@hitalk/shared'
+import { HitalkAPI, APIError } from './api'
 import { Store } from './store'
 import { Editor, type EditorData } from './ui/Editor'
 import { CommentList } from './ui/CommentList'
-import { check } from './utils'
-import './styles.css'
-
+import type { CommentActions } from './renderer/comment'
+import { renderFeedback, type FeedbackKind } from './renderer/feedback'
 export type {
-  HitalkOptions,
-  GuestField,
-  CommentCountResponse,
   Comment,
   CommentCreateRequest,
   CommentListResponse,
+  ReplyListResponse,
+  HitalkOptions,
+  GuestField,
+  UserInfo,
 } from '@hitalk/shared'
+export { getCommentCounts, fillCommentCounts } from './counts'
 export { normalizePagePath } from '@hitalk/shared'
-export {
-  getCommentCounts,
-  fillCommentCounts,
-  type CommentCountOptions,
-} from './counts'
 const instances = new WeakMap<HTMLElement, Hitalk>()
-
+interface Pending {
+  fingerprint: string
+  request: CommentCreateRequest
+}
 export class Hitalk {
   private api: HitalkAPI
-  private store = new Store()
-  private container: HTMLElement
+  private store: Store
   private editor: Editor
-  private editorContainer: HTMLElement
+  private commentList: CommentList
+  private receiptList: CommentList
+  private receipts: Comment[] = []
+  private receiptContainer = createRef<HTMLElement>()
+  private container: HTMLElement
   private view: HTMLElement
+  private editorContainer: HTMLElement
   private editorHome = createRef<HTMLElement>()
   private listContainer = createRef<HTMLElement>()
-  private message = ''
-  private messageKind: 'error' | 'info' | 'success' = 'info'
-  private total: number | null = null
-  private hasMore = false
-  private retry = false
-  private commentList: CommentList
-  private options: Required<HitalkOptions>
   private unsubscribe: () => void
+  private events = new AbortController()
+  private path: string
+  private draftKey: string
+  private requestKey: string
+  private pending: Pending | null = null
   private destroyed = false
   private submitting = false
-  private liking = new Set<string>()
-  private loadSequence = 0
-  private loadingPage = false
-  private pending = 0
-  private page = 1
-  private likeRevision = 0
-  private likeUpdates = new Map<string, { revision: number; count: number }>()
-
+  private loading = false
+  private retry = false
+  private sequence = 0
+  private mutation = 0
+  private cursor: string | null = null
+  private total: number | null = null
+  private enabled = true
+  private firstLoad = true
+  private message = ''
+  private messageKind: FeedbackKind = 'info'
+  private busyReplies = new Set<string>()
+  private busyMutations = new Set<string>()
+  private options: HitalkOptions
   constructor(selector: string | HTMLElement, options: HitalkOptions) {
     const el =
       typeof selector === 'string' ? document.querySelector(selector) : selector
     if (!(el instanceof HTMLElement))
       throw new Error('Hitalk: 无法找到指定的容器元素')
-    if (!options.server) throw new Error('Hitalk: 缺少 server 配置')
-    const pageSize = options.pageSize ?? 10
-    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50)
-      throw new Error('Hitalk: pageSize 必须为 1–50 的整数')
-    const guestFields =
-      options.guestFields ?? (['nick', 'email', 'website'] as const)
+    const path = normalizePagePath(options.path ?? location.pathname)
     if (
-      !Array.isArray(guestFields) ||
-      guestFields.some(field => !['nick', 'email', 'website'].includes(field))
+      !Number.isInteger(options.pageSize ?? 10) ||
+      (options.pageSize ?? 10) < 1 ||
+      (options.pageSize ?? 10) > 20
     )
-      throw new Error('Hitalk: guestFields 只允许 nick、email、website')
-    this.options = {
-      server: options.server,
-      path: normalizePagePath(options.path ?? location.pathname),
-      title: options.title || document.title,
-      placeholder: options.placeholder || '说点什么吧...',
-      avatar: options.avatar || 'mm',
-      pageSize,
-      guestFields: [...new Set(guestFields)],
-    }
+      throw new Error('Hitalk: pageSize 必须为 1–20 的整数')
+    const fields = options.guestFields ?? ['nick', 'email', 'website']
+    if (
+      !Array.isArray(fields) ||
+      fields.some(f => !['nick', 'email', 'website'].includes(f))
+    )
+      throw new Error('Hitalk: guestFields 无效')
+    this.api = new HitalkAPI(options.server)
+    this.path = path
+    this.options = options
+    this.draftKey = `hitalk:draft:${this.api.baseURL}:${path}`
+    this.requestKey = `${this.draftKey}:request`
+    this.store = new Store(`hitalk:profile:${this.api.baseURL}`)
     instances.get(el)?.destroy()
     this.container = el
-    this.api = new HitalkAPI(this.options.server)
     el.classList.add('Hitalk')
     this.view = el.ownerDocument.createElement('div')
     this.view.className = 'hitalk-root'
     el.replaceChildren(this.view)
-    this.renderShell()
+    this.shell()
     this.editorContainer = el.ownerDocument.createElement('div')
     this.editorContainer.className = 'editor-container'
     this.editorHome.value!.append(this.editorContainer)
     this.editor = new Editor(
       this.editorContainer,
       this.store.getUserInfo(),
-      this.options.placeholder,
+      options.placeholder || '说点什么吧…',
       data => {
-        void this.handleSubmit(data)
+        void this.submit(data)
       },
-      () => this.handleCancelReply(),
-      this.options.guestFields
-    )
-    this.commentList = new CommentList(
-      this.listContainer.value!,
-      this.options.avatar,
-      {
-        onReply: (id, nick) => this.handleReply(id, nick),
-        onLocate: id => this.commentList.locate(id),
-        onLike: id => {
-          void this.handleLike(id)
-        },
+      () => this.cancelReply(),
+      [...new Set(fields)],
+      info => {
+        this.store.setUserInfo(info)
+        this.saveDraft()
       }
     )
-    this.unsubscribe = this.store.subscribe(() => this.updateUI())
+    const actions: CommentActions = {
+      onReply: (id, nick) => this.reply(id, nick),
+      onLike: id => {
+        void this.like(id)
+      },
+      onLocate: id => {
+        void this.locate(id)
+      },
+      onDelete: id => {
+        void this.remove(id)
+      },
+      onMore: id => {
+        void this.moreReplies(id)
+      },
+      isLoading: id => this.busyReplies.has(id),
+    }
+    this.commentList = new CommentList(
+      this.listContainer.value!,
+      options.avatar || 'mm',
+      actions
+    )
+    this.receiptList = new CommentList(
+      this.receiptContainer.value!,
+      options.avatar || 'mm',
+      actions
+    )
+    this.unsubscribe = this.store.subscribe(() => this.update())
+    this.restoreDraft()
+    this.editorContainer.addEventListener('input', () => this.saveDraft(), {
+      signal: this.events.signal,
+    })
+    this.editorContainer.addEventListener('change', () => this.saveDraft(), {
+      signal: this.events.signal,
+    })
     instances.set(el, this)
     void this.refresh()
   }
-
-  /** Reload the first page without replacing the editor or its draft. */
-  async refresh(): Promise<void> {
-    if (!this.destroyed) await this.loadComments(1)
-  }
-
-  private async loadComments(page: number) {
-    const sequence = ++this.loadSequence
-    const likeRevision = this.likeRevision
-    this.loadingPage = true
-    this.retry = false
-    this.message = ''
-    this.busy(1)
+  private saveDraft() {
     try {
-      const result = await this.api.fetchComments(
-        this.options.path,
-        page,
-        this.options.pageSize
-      )
-      if (this.destroyed || sequence !== this.loadSequence) return
-      const mergeLikes = (
-        comments: typeof result.comments
-      ): typeof result.comments =>
-        comments.map(comment => {
-          const update = this.likeUpdates.get(comment.id)
-          return {
-            ...comment,
-            like_count:
-              update && update.revision > likeRevision
-                ? Math.max(comment.like_count, update.count)
-                : comment.like_count,
-            children: comment.children
-              ? mergeLikes(comment.children)
-              : undefined,
-          }
+      sessionStorage.setItem(
+        this.draftKey,
+        JSON.stringify({
+          fields: this.editor.snapshot(),
+          reply: this.store.getReplyTarget(),
         })
-      const received = mergeLikes(result.comments)
-      const comments =
-        page === 1 ? received : [...this.store.getComments(), ...received]
-      this.store.setComments([
-        ...new Map(comments.map(comment => [comment.id, comment])).values(),
-      ])
-      this.page = page
-      this.total = result.total
-      this.hasMore = result.pagination.has_more
-    } catch (error) {
-      if (!this.destroyed && sequence === this.loadSequence) {
-        this.showMessage(`加载失败：${this.errorMessage(error)}`)
-        this.retry = true
-      }
-    } finally {
-      if (!this.destroyed && sequence === this.loadSequence)
-        this.loadingPage = false
-      this.busy(-1)
+      )
+    } catch {
+      /* draft persistence is optional */
     }
   }
-
-  private async handleSubmit(data: EditorData) {
+  private restoreDraft() {
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(this.draftKey) || 'null')
+      if (draft && typeof draft.fields === 'object')
+        this.editor.restore(draft.fields)
+      if (
+        draft?.reply &&
+        typeof draft.reply.id === 'string' &&
+        typeof draft.reply.nick === 'string'
+      ) {
+        this.store.setReplyTarget(draft.reply)
+        this.editor.setReply(draft.reply.nick)
+      }
+      const pending: unknown = JSON.parse(
+        sessionStorage.getItem(this.requestKey) || 'null'
+      )
+      if (
+        pending &&
+        typeof pending === 'object' &&
+        'fingerprint' in pending &&
+        typeof pending.fingerprint === 'string' &&
+        'request' in pending &&
+        typeof pending.request === 'object'
+      )
+        this.pending = pending as Pending
+    } catch {
+      /* damaged session cache is ignored */
+    }
+  }
+  private notice(message: string, kind: FeedbackKind = 'info') {
+    this.message = message
+    this.messageKind = kind
+    this.shell()
+    const feedback = this.view.querySelector<HTMLElement>('.hitalk-feedback')
+    feedback?.getAnimations?.().forEach(animation => animation.cancel())
+    if (
+      message &&
+      !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ) {
+      feedback?.animate?.(
+        [
+          { opacity: 0.6, transform: 'translateY(-4px)' },
+          { opacity: 1, transform: 'translateY(0)' },
+        ],
+        { duration: 200, easing: 'ease-out' }
+      )
+    }
+  }
+  private error(error: unknown) {
+    return error instanceof APIError && error.code === 'RATE_LIMITED'
+      ? `操作过于频繁，请在 ${error.retryAfter || 60} 秒后重试`
+      : error instanceof Error
+        ? error.message
+        : '请稍后重试'
+  }
+  async refresh(): Promise<void> {
+    if (!this.destroyed) await this.load(false)
+  }
+  private async load(more: boolean) {
+    const sequence = ++this.sequence,
+      revision = this.mutation
+    this.loading = true
+    this.retry = false
+    this.shell()
+    try {
+      const result = await this.api.fetchComments(
+        this.path,
+        more ? this.cursor : null,
+        this.options.pageSize || 10
+      )
+      if (
+        this.destroyed ||
+        sequence !== this.sequence ||
+        revision !== this.mutation
+      )
+        return
+      if (!more && this.api.identity.read()) {
+        try {
+          const own = await this.api.pendingComments(this.path)
+          if (
+            this.destroyed ||
+            sequence !== this.sequence ||
+            revision !== this.mutation
+          )
+            return
+          this.receipts = own.comments.filter(
+            c => c.status === 'pending' && !c.deleted
+          )
+        } catch (error) {
+          if (error instanceof APIError && error.status === 401)
+            this.receipts = []
+        }
+      }
+      if (
+        this.destroyed ||
+        sequence !== this.sequence ||
+        revision !== this.mutation
+      )
+        return
+      this.store.setComments([
+        ...new Map(
+          [
+            ...(more ? this.store.getComments() : result.pinned),
+            ...result.comments,
+          ].map(c => [c.id, c])
+        ).values(),
+      ])
+      this.cursor = result.next_cursor
+      this.total = result.total
+      this.enabled = result.comments_enabled
+      if (!this.enabled) this.notice('此页面已关闭评论', 'warning')
+      if (this.firstLoad) {
+        this.firstLoad = false
+        const target = location.hash.slice(1)
+        if (/^[0-9a-f-]{36}$/i.test(target)) void this.locate(target)
+      }
+    } catch (error) {
+      if (!this.destroyed && sequence === this.sequence) {
+        this.retry = true
+        this.notice(`加载失败：${this.error(error)}`, 'error')
+      }
+    } finally {
+      if (!this.destroyed && sequence === this.sequence) {
+        this.loading = false
+        this.shell()
+      }
+    }
+  }
+  private update() {
+    const active = this.container.ownerDocument.activeElement
+    this.commentList.update(this.store.getComments())
+    this.receiptList.update(this.receipts)
+    const target = this.store.getReplyTarget()
+    const slot = target ? this.commentList.replySlot(target.id) : null
+    ;(slot || this.editorHome.value)!.append(this.editorContainer)
+    if (
+      active instanceof HTMLElement &&
+      active.isConnected &&
+      this.container.contains(active)
+    )
+      active.focus({ preventScroll: true })
+  }
+  private reply(id: string, nick: string) {
+    if (this.submitting) return
+    this.store.setReplyTarget({ id, nick })
+    this.editor.setReply(nick)
+    this.update()
+    this.editor.focus()
+    this.saveDraft()
+  }
+  private cancelReply() {
+    this.store.setReplyTarget(null)
+    this.editor.setReply(null)
+    this.editorHome.value!.append(this.editorContainer)
+    this.saveDraft()
+  }
+  private async submit(data: EditorData) {
     if (this.destroyed || this.submitting) return
-    const nick = data.nick || 'Guest'
-    if (!data.content) return this.showMessage('请先填写评论内容')
-    if (data.email && !check.mail(data.email).k)
-      return this.showMessage('您的邮箱格式不正确')
-    if (data.website && !check.link(data.website).k)
-      return this.showMessage('您的网址格式不正确')
+    if (!this.enabled) {
+      this.notice('此页面已关闭评论', 'warning')
+      return
+    }
+    if (!data.content.trim()) {
+      this.notice('请先填写评论内容', 'error')
+      return
+    }
+    if (data.email && !isValidEmail(data.email.trim())) {
+      this.notice('邮箱格式不正确', 'error')
+      return
+    }
+    if (data.website && !isValidWebsite(data.website.trim())) {
+      this.notice('网址格式不正确', 'error')
+      return
+    }
+    const input = {
+      path: this.path,
+      title: this.options.title || document.title,
+      nick: data.nick.trim() || 'Guest',
+      email: data.email.trim() || undefined,
+      website: data.website.trim() || undefined,
+      content: data.content.trim(),
+      reply_to_id: this.store.getReplyTarget()?.id,
+      notify: Boolean(data.email.trim() && data.notify),
+    }
+    const fingerprint = JSON.stringify(input)
+    if (this.pending?.fingerprint !== fingerprint)
+      this.pending = {
+        fingerprint,
+        request: { ...input, client_request_id: crypto.randomUUID() },
+      }
+    this.saveDraft()
+    try {
+      sessionStorage.setItem(this.requestKey, JSON.stringify(this.pending))
+    } catch {
+      /* in-memory retry remains available */
+    }
     this.submitting = true
     this.editor.setSubmitting(true)
-    this.busy(1)
-    this.showMessage('')
+    this.notice('正在发送，请稍候…', 'loading')
     try {
-      const target = this.store.getReplyTarget()
-      await this.api.createComment({
-        path: this.options.path,
-        title: this.options.title,
-        nick,
-        email: data.email || undefined,
-        website: data.website || undefined,
-        content: data.content,
-        parent_id: target?.id,
-      })
+      const created = await this.api.createComment(this.pending!.request)
       if (this.destroyed) return
-      this.handleCancelReply()
-      if (nick !== 'Guest')
-        this.store.setUserInfo({
-          nick,
-          email: data.email,
-          website: data.website,
-        })
+      this.mutation++
+      this.pending = null
+      try {
+        sessionStorage.removeItem(this.requestKey)
+      } catch {
+        /* optional */
+      }
+      this.editor.saveProfile({
+        nick: input.nick,
+        email: data.email,
+        website: data.website,
+      })
       this.editor.clear()
-      await this.refresh()
-      if (!this.destroyed && !this.retry)
-        this.showMessage('评论已发送', 'success')
+      this.cancelReply()
+      this.saveDraft()
+      if (created.deleted) {
+        this.notice('这条评论已经删除，不会重复发布')
+        return
+      }
+      if (created.status === 'published') this.store.upsert(created)
+      else {
+        this.receipts = [
+          created,
+          ...this.receipts.filter(c => c.id !== created.id),
+        ]
+        this.update()
+      }
+      this.notice(
+        created.status === 'published'
+          ? '评论已发送'
+          : '已提交，审核通过后展示',
+        created.status === 'published' ? 'success' : 'warning'
+      )
+      if (created.status === 'published') {
+        try {
+          if (created.root_id) {
+            const context = await this.api.context(created.id)
+            if (!this.destroyed) {
+              const existing = this.store.find(context.root.id)
+              this.store.upsert({
+                ...context.root,
+                replies: [
+                  ...new Map(
+                    [
+                      ...(existing?.replies || []),
+                      ...(context.root.replies || []),
+                    ].map(c => [c.id, c])
+                  ).values(),
+                ],
+                reply_cursor:
+                  existing?.reply_cursor ?? context.root.reply_cursor,
+              })
+            }
+          }
+          const counts = await this.api.getCommentCounts([this.path])
+          if (!this.destroyed) {
+            this.total = counts[this.path]
+            this.shell()
+          }
+        } catch {
+          if (!this.destroyed)
+            this.notice('评论已发送，列表同步失败，可重新加载', 'warning')
+        }
+      }
     } catch (error) {
       if (!this.destroyed)
-        this.showMessage(`提交失败：${this.errorMessage(error)}`)
+        this.notice(
+          error instanceof APIError
+            ? `提交失败：${this.error(error)}`
+            : '暂未确认发送结果，重试会使用同一请求，不会重复发布',
+          error instanceof APIError ? 'error' : 'warning'
+        )
     } finally {
       this.submitting = false
-      this.busy(-1)
       if (!this.destroyed) this.editor.setSubmitting(false)
     }
   }
-
-  private updateUI() {
-    const active = this.container.ownerDocument.activeElement
-    const focused =
-      active instanceof HTMLElement && this.view.contains(active)
-        ? active
-        : null
-    this.commentList.update(this.store.getComments())
-    const target = this.store.getReplyTarget()
-    if (target && !this.commentList.replySlot(target.id))
-      this.handleCancelReply()
-    else
-      this.placeEditor(
-        target ? this.commentList.replySlot(target.id)! : this.editorHome.value!
-      )
-    // Keyed list reordering can move an ancestor of the focused element.
-    if (
-      focused?.isConnected &&
-      focused !== this.container.ownerDocument.activeElement
-    )
-      focused.focus({ preventScroll: true })
-  }
-
-  private placeEditor(slot: HTMLElement) {
-    if (this.editorContainer.parentElement !== slot)
-      slot.append(this.editorContainer)
-  }
-
-  private handleReply(id: string, nick: string) {
-    if (this.submitting || this.destroyed) return
-    const slot = this.commentList.replySlot(id)
-    if (!slot) return
-    this.store.setReplyTarget({ id, nick })
-    this.placeEditor(slot)
-    this.editor.setReply(nick)
-    this.editor.focus()
-  }
-
-  private handleCancelReply() {
-    this.store.setReplyTarget(null)
-    this.placeEditor(this.editorHome.value!)
-    this.editor.setReply(null)
-  }
-
-  private async handleLike(id: string) {
-    if (this.destroyed || this.liking.has(id)) return
-    this.liking.add(id)
+  private async like(id: string) {
+    if (this.destroyed || this.busyMutations.has(id)) return
+    const comment = this.store.find(id)
+    if (!comment) return
+    this.busyMutations.add(id)
     try {
-      const result = await this.api.likeComment(id)
-      if (this.destroyed) return
-      this.likeUpdates.set(id, {
-        revision: ++this.likeRevision,
-        count: result.like_count,
-      })
-      this.store.setLikeCount(id, result.like_count)
-      if (!result.success) this.showMessage('您已经点过赞了', 'info')
+      const result = await this.api.likeComment(id, !comment.liked)
+      if (!this.destroyed) {
+        this.mutation++
+        this.store.patch(id, result)
+      }
     } catch (error) {
-      if (!this.destroyed)
-        this.showMessage(`点赞失败：${this.errorMessage(error)}`)
+      if (!this.destroyed) this.notice(this.error(error), 'error')
     } finally {
-      this.liking.delete(id)
+      this.busyMutations.delete(id)
     }
   }
-
-  private renderShell() {
+  private async remove(id: string) {
+    if (this.destroyed || this.busyMutations.has(id)) return
+    this.busyMutations.add(id)
+    try {
+      await this.api.deleteComment(id)
+      if (!this.destroyed) {
+        this.mutation++
+        this.receipts = this.receipts.filter(c => c.id !== id)
+        this.store.markDeleted(id)
+        if (this.store.getReplyTarget()?.id === id) this.cancelReply()
+        this.notice('评论已删除', 'success')
+        const counts = await this.api.getCommentCounts([this.path])
+        if (!this.destroyed) {
+          this.total = counts[this.path]
+          this.shell()
+        }
+      }
+    } catch (error) {
+      if (!this.destroyed) this.notice(this.error(error), 'error')
+    } finally {
+      this.busyMutations.delete(id)
+    }
+  }
+  private async moreReplies(id: string) {
+    const root = this.store.find(id)
+    if (this.destroyed || !root?.reply_cursor || this.busyReplies.has(id))
+      return
+    this.busyReplies.add(id)
+    this.update()
+    const revision = this.mutation
+    try {
+      const result = await this.api.fetchReplies(id, root.reply_cursor)
+      if (!this.destroyed && revision === this.mutation) {
+        const current = this.store.find(id)
+        this.store.patch(id, {
+          replies: [
+            ...new Map(
+              [...(current?.replies || []), ...result.comments].map(c => [
+                c.id,
+                c,
+              ])
+            ).values(),
+          ],
+          reply_cursor: result.next_cursor,
+        })
+      }
+    } catch (error) {
+      if (!this.destroyed) this.notice(this.error(error), 'error')
+    } finally {
+      this.busyReplies.delete(id)
+      if (!this.destroyed) this.update()
+    }
+  }
+  private async locate(id: string) {
+    if (this.store.find(id)) {
+      this.commentList.locate(id)
+      return
+    }
+    const revision = this.mutation
+    try {
+      const context = await this.api.context(id)
+      if (this.destroyed || revision !== this.mutation) return
+      const current = this.store.find(context.root.id)
+      this.store.upsert({
+        ...context.root,
+        replies: [
+          ...new Map(
+            [...(current?.replies || []), ...(context.root.replies || [])].map(
+              c => [c.id, c]
+            )
+          ).values(),
+        ],
+        reply_cursor: current?.reply_cursor ?? context.root.reply_cursor,
+      })
+      this.commentList.locate(id)
+    } catch (error) {
+      if (!this.destroyed) this.notice(this.error(error), 'error')
+    }
+  }
+  private shell() {
     if (this.destroyed) return
     render(
-      html`
-        <div ${ref(this.editorHome)} class="editor-home"></div>
-        <div
-          class="hitalk-feedback"
-          data-visible=${Boolean(this.message)}
-          data-kind=${this.messageKind}
+      html`<div ${ref(this.editorHome)} class="editor-home"></div>
+        ${renderFeedback(this.message, this.messageKind)}
+        <button
+          class="vbtn hitalk-retry"
+          ?hidden=${!this.retry}
+          @click=${() => {
+            void this.refresh()
+          }}
         >
-          <span
-            class="hitalk-feedback-icon"
-            aria-hidden="true"
-            ?hidden=${!this.message}
-            >${this.messageKind === 'success' ? '✓' : this.messageKind === 'error' ? '!' : 'i'}</span
+          重新加载
+        </button>
+        <div class="info">
+          <span class="count"
+            >${this.total === null ? '' : `评论(${this.total})`}</span
           >
-          <div
-            class="hitalk-status"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            ${this.message}
-          </div>
-          <button
-            type="button"
-            class="vbtn hitalk-retry"
-            ?hidden=${!this.retry}
-            @click=${() => {
-              void this.refresh()
-            }}
-          >
-            重新加载
-          </button>
         </div>
-        <div class="info" ?hidden=${this.total === null}>
-          <div class="count">
-            ${this.total === null ? '' : `评论(${this.total})`}
-          </div>
-        </div>
-        <div class="loading-container">
-          <div class="vloading${this.pending ? '' : ' dn'}">
-            <div class="spinner">
-              <div class="r1"></div>
-              <div class="r2"></div>
-              <div class="r3"></div>
-              <div class="r4"></div>
-              <div class="r5"></div>
-            </div>
-            <span class="hitalk-loading-label">正在处理，请稍候…</span>
-          </div>
+        ${this.loading ? html`<div class="hitalk-loading" role="status">正在加载…</div>` : nothing}
+        <div class="hitalk-receipts" ?hidden=${!this.receipts.length}>
+          <p class="hitalk-receipts-title">我的最近待审核评论</p>
+          <div ${ref(this.receiptContainer)}></div>
         </div>
         <div ${ref(this.listContainer)} class="comment-list-container"></div>
         <button
-          type="button"
           class="vbtn hitalk-more"
-          ?hidden=${!this.hasMore}
-          ?disabled=${this.loadingPage || this.submitting}
-          aria-busy=${this.loadingPage ? 'true' : 'false'}
+          ?hidden=${!this.cursor}
+          ?disabled=${this.loading || this.submitting}
           @click=${() => {
-            if (!this.loadingPage && !this.submitting)
-              void this.loadComments(this.page + 1)
+            void this.load(true)
           }}
         >
-          ${this.loadingPage ? '正在加载…' : '加载更多评论'}
-        </button>
-      `,
+          加载更多评论
+        </button>`,
       this.view
     )
   }
-
-  private busy(delta: number) {
-    this.pending = Math.max(0, this.pending + delta)
-    this.renderShell()
-  }
-
-  private showMessage(
-    message: string,
-    kind: 'error' | 'info' | 'success' = 'error'
-  ) {
-    this.message = message
-    this.messageKind = kind
-    this.renderShell()
-  }
-  private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : '请稍后重试'
-  }
-
-  /** Release requests, subscriptions and document listeners before SPA navigation/remount. */
   destroy(): void {
     if (this.destroyed) return
+    this.saveDraft()
     this.destroyed = true
-    this.loadSequence++
+    this.sequence++
     this.api.destroy()
+    this.events.abort()
     this.unsubscribe()
     this.editor.destroy()
     this.commentList.destroy()
+    this.receiptList.destroy()
     render(nothing, this.view).setConnected(false)
     this.view.remove()
     this.container.classList.remove('Hitalk')
     instances.delete(this.container)
   }
 }
-
 export function mount(
   selector: string | HTMLElement,
   options: HitalkOptions

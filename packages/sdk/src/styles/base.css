@@ -1,8 +1,10 @@
 .Hitalk {
   box-sizing: border-box;
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
-    Cantarell, sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--ht-text);
 }
 
@@ -12,20 +14,44 @@
   box-sizing: inherit;
 }
 
-.Hitalk .dn {
+/* Native hidden must win over component layout in every state. */
+.Hitalk [hidden] {
   display: none !important;
 }
 
-/* 输入框通用样式 */
+.Hitalk button {
+  margin: 0;
+  font: inherit;
+  line-height: 1.4;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.Hitalk button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.Hitalk button:focus-visible,
+.Hitalk a:focus-visible,
+.Hitalk input[type='checkbox']:focus-visible {
+  outline: 1px solid var(--ht-accent);
+  outline-offset: 2px;
+}
+
 .Hitalk .vinput {
-  border: none;
-  resize: none;
-  outline: none;
-  padding: 10px 0;
+  display: block;
+  margin: 0;
+  padding: 12px 0;
   max-width: 100%;
-  font-size: 0.875rem;
-  font-family: inherit;
-  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  font: inherit;
+  line-height: 1.7;
+  color: var(--ht-text);
+  background-color: transparent;
 }
 
 .Hitalk .vinput::placeholder {
@@ -33,47 +59,36 @@
   opacity: 1;
 }
 
-.Hitalk .vbtn:focus-visible {
-  outline: 2px solid var(--ht-accent);
-  outline-offset: 3px;
+.Hitalk .vinput:disabled,
+.Hitalk .vinput:read-only {
+  opacity: 0.65;
 }
 
-/* 按钮 */
 .Hitalk .vbtn {
-  display: inline-block;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
-  font-family: inherit;
-  font-weight: 400;
-  line-height: 1.42857143;
-  text-align: center;
-  white-space: nowrap;
-  vertical-align: middle;
-  user-select: none;
-  cursor: pointer;
-  border: 1px solid var(--ht-btn-bg);
-  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid var(--ht-border-dashed);
+  border-radius: 8px;
   background: var(--ht-btn-bg);
   color: var(--ht-btn-text);
-  outline: none;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
   transition:
-    background-color 0.3s,
-    border-color 0.3s,
-    color 0.3s;
+    background-color 180ms,
+    border-color 180ms,
+    color 180ms;
 }
 
-.Hitalk .vbtn[hidden] {
-  display: none;
-}
-
-.Hitalk .vbtn:hover:not(:disabled),
-.Hitalk .vbtn:active:not(:disabled) {
+.Hitalk .vbtn:hover:not(:disabled) {
   color: var(--ht-accent);
   border-color: var(--ht-accent);
-  background-color: var(--ht-bg);
+  background: var(--ht-bg);
 }
 
-.Hitalk .vbtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.Hitalk .vbtn:active:not(:disabled) {
+  border-color: var(--ht-accent);
 }

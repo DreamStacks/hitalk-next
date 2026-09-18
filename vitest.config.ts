@@ -47,6 +47,7 @@ export default defineConfig(async (): Promise<ViteUserConfig> => ({
               d1Databases: ['DB'],
               bindings: {
                 ADMIN_TOKEN: 'test-admin',
+                RATE_LIMIT_ENABLED: 'false',
                 IP_HASH_SALT: 'test-ip-salt',
                 TEST_MIGRATIONS: await readD1Migrations(
                   './apps/server/migrations'

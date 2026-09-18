@@ -1,38 +1,37 @@
 import { html, nothing, render } from 'lit-html'
-import { createRef, ref } from 'lit-html/directives/ref.js'
 import type { GuestField, UserInfo } from '@hitalk/shared'
+import { isValidEmail, isValidWebsite } from '@hitalk/shared'
 import { renderEmojiPicker } from '../renderer/emoji'
-
 export interface EditorData extends UserInfo {
   content: string
+  notify: boolean
 }
-
 export class Editor {
   private events = new AbortController()
-  private textarea = createRef<HTMLTextAreaElement>()
-  private smiles = createRef<HTMLElement>()
   private submitting = false
   private replyNick: string | null = null
   private emojiOpen = false
   private emojiCategory = 0
-  private editingInfo: boolean
-
+  private editingProfile = true
   constructor(
     private container: HTMLElement,
     private userInfo: UserInfo | null,
     private placeholder: string,
     private onSubmit: (data: EditorData) => void,
     private onCancel: () => void,
-    private guestFields: readonly GuestField[]
+    private guestFields: readonly GuestField[],
+    private onProfileChange: (info: UserInfo) => void
   ) {
-    this.editingInfo = !userInfo || !guestFields.includes('nick')
+    this.editingProfile = !this.validProfile(userInfo)
     this.render()
     container.ownerDocument.body.addEventListener(
       'mouseup',
       event => {
         if (
           this.emojiOpen &&
-          !this.smiles.value?.contains(event.target as Node)
+          !this.container
+            .querySelector('.vemoji')
+            ?.contains(event.target as Node)
         ) {
           this.emojiOpen = false
           this.render()
@@ -41,149 +40,169 @@ export class Editor {
       { signal: this.events.signal }
     )
   }
-
-  private submit = () => {
-    if (this.submitting) return
+  snapshot(): EditorData {
     const value = (selector: string) =>
-      this.container.querySelector<HTMLInputElement>(selector)?.value.trim() ||
-      ''
-    this.onSubmit({
+      this.container.querySelector<HTMLInputElement>(selector)?.value || ''
+    return {
       nick: value('.vnick'),
       email: value('.vmail'),
       website: value('.vlink'),
-      content: this.textarea.value!.value.trim(),
-    })
+      content: value('.veditor'),
+      notify:
+        this.container.querySelector<HTMLInputElement>('.vnotify')?.checked ||
+        false,
+    }
   }
-
-  private selectEmoji = (value: string) => {
-    if (this.submitting) return
-    this.textarea.value!.value += ` ${value} `
-    this.textarea.value!.focus()
-    this.emojiOpen = false
+  restore(data: Partial<EditorData>) {
+    for (const [name, selector] of Object.entries({
+      nick: '.vnick',
+      email: '.vmail',
+      website: '.vlink',
+      content: '.veditor',
+    })) {
+      const el = this.container.querySelector<HTMLInputElement>(selector)
+      const value = data[name as keyof EditorData]
+      if (el && typeof value === 'string') el.value = value
+    }
+    const notify = this.container.querySelector<HTMLInputElement>('.vnotify')
+    if (notify) notify.checked = data.notify === true
+    // Unsaved profile edits in a restored draft must remain visible.
+    const current = this.snapshot()
+    if (
+      this.guestFields.some(
+        field => current[field].trim() !== (this.userInfo?.[field] || '').trim()
+      )
+    ) {
+      this.editingProfile = true
+      this.render()
+    }
+  }
+  private validProfile(info: UserInfo | null): boolean {
+    return Boolean(
+      this.guestFields.includes('nick') &&
+      info?.nick.trim() &&
+      info.nick.trim().length <= 80 &&
+      (!this.guestFields.includes('email') ||
+        !info.email.trim() ||
+        isValidEmail(info.email.trim())) &&
+      (!this.guestFields.includes('website') ||
+        !info.website.trim() ||
+        isValidWebsite(info.website.trim()))
+    )
+  }
+  saveProfile(info: UserInfo) {
+    this.userInfo = {
+      nick: info.nick.trim(),
+      email: info.email.trim(),
+      website: info.website.trim(),
+    }
+    this.editingProfile = !this.validProfile(this.userInfo)
     this.render()
+    this.onProfileChange(this.userInfo)
   }
-
-  private selectCategory = (index: number) => {
-    this.emojiCategory = index
-    this.render()
+  private finishProfile() {
+    if (this.submitting || !this.editingProfile) return
+    const data = this.snapshot()
+    if (this.validProfile(data)) this.saveProfile(data)
   }
-
   private render() {
     render(
-      html`
-        <div class="vwrap">
-          ${
-            this.userInfo && this.guestFields.includes('nick')
-              ? html`<div class="welcome">
-                  欢迎回来,${this.userInfo.nick}!<span
-                    class="info-edit"
-                    @click=${() => {
-                      this.editingInfo = !this.editingInfo
-                      this.render()
-                    }}
-                    >修改</span
-                  >
-                </div>`
-              : nothing
-          }
-          ${
-            this.guestFields.length
-              ? html` <div class="vheader${this.editingInfo ? '' : ' hide'}">
-                  ${this.guestFields.map(field => {
-                    const labels = {
-                      nick: '称呼',
-                      email: '邮箱',
-                      website: '网址',
-                    }
-                    const classes = {
-                      nick: 'vnick',
-                      email: 'vmail',
-                      website: 'vlink',
-                    }
-                    return html`<input
-                      name=${field}
-                      placeholder=${labels[field]}
-                      aria-label=${labels[field]}
-                      class=${`${classes[field]} vinput`}
-                      type=${field === 'email' ? 'email' : 'text'}
-                      .value=${this.userInfo?.[field] || ''}
-                      ?disabled=${this.submitting}
-                    />`
-                  })}
-                </div>`
-              : nothing
-          }
-          <!-- Native input values remain user-owned between renders; only clear() resets the draft. -->
-          <div class="vedit">
-            <textarea
-              ${ref(this.textarea)}
-              class="veditor vinput"
-              placeholder=${this.replyNick === null ? this.placeholder : `回复 @${this.replyNick}`}
-              ?disabled=${this.submitting}
-            ></textarea>
-          </div>
-          <div class="vcontrol">
-            <span
-              ${ref(this.smiles)}
-              class="smiles${this.emojiOpen ? ' smiles-open' : ''}"
-            >
-              <div
-                class="smiles-logo"
-                @click=${() => {
-                  if (!this.submitting) {
-                    this.emojiOpen = !this.emojiOpen
-                    this.render()
-                  }
-                }}
-              >
-                <span>😊</span>
-              </div>
-              ${renderEmojiPicker(this.emojiCategory, this.selectCategory, this.selectEmoji)}
-            </span>
-            <div class="vactions">
-              <button
-                type="button"
-                class="vcancel-reply vbtn${this.replyNick === null ? ' dn' : ''}"
-                ?disabled=${this.submitting}
-                @click=${this.onCancel}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                class="vsubmit vbtn"
-                ?disabled=${this.submitting}
-                @click=${this.submit}
-              >
-                回复
-              </button>
-            </div>
-          </div>
+      html`<div class="vwrap">
+        <div class="vprofile" ?hidden=${this.editingProfile}>
+          <span class="vprofile-nick">${this.userInfo?.nick}</span>
+          <button
+            class="vprofile-edit"
+            type="button"
+            aria-label="编辑个人信息"
+            ?disabled=${this.submitting}
+            @click=${() => {
+              this.editingProfile = true
+              this.render()
+              this.container.querySelector<HTMLInputElement>('.vnick')?.focus()
+            }}
+          >
+            编辑
+          </button>
         </div>
-      `,
+        <div class="vheader" ?hidden=${!this.editingProfile}>
+          ${this.guestFields.map(field => html`<input name=${field} type=${field === 'email' ? 'email' : field === 'website' ? 'url' : 'text'} class=${`vinput ${field === 'nick' ? 'vnick' : field === 'email' ? 'vmail' : 'vlink'}`} aria-label=${field === 'nick' ? '昵称' : field === 'email' ? '邮箱' : '网址'} placeholder=${field === 'nick' ? '昵称' : field === 'email' ? '邮箱（可选）' : '网址（可选）'} .value=${this.userInfo?.[field] || ''} ?disabled=${this.submitting} />`)}
+        </div>
+        ${this.replyNick ? html`<div class="vreplying">回复 @${this.replyNick} <button type="button" ?disabled=${this.submitting} @click=${this.onCancel}>取消回复</button></div>` : nothing}
+        <textarea
+          class="vinput veditor"
+          name="content"
+          aria-label="评论内容"
+          placeholder=${this.placeholder}
+          .readOnly=${this.submitting}
+          @focus=${() => this.finishProfile()}
+        ></textarea>
+        <div class="vcontrol">
+          <div class="vemoji">
+            <button
+              type="button"
+              aria-label="插入表情"
+              aria-expanded=${String(this.emojiOpen)}
+              ?disabled=${this.submitting}
+              @click=${() => {
+                this.emojiOpen = !this.emojiOpen
+                this.render()
+              }}
+            >
+              😊</button
+            >${
+              this.emojiOpen
+                ? renderEmojiPicker(
+                    this.emojiCategory,
+                    category => {
+                      this.emojiCategory = category
+                      this.render()
+                    },
+                    value => {
+                      const input =
+                        this.container.querySelector<HTMLTextAreaElement>(
+                          '.veditor'
+                        )!
+                      input.value += ` ${value} `
+                      input.focus()
+                      this.emojiOpen = false
+                      this.render()
+                    }
+                  )
+                : nothing
+            }
+          </div>
+          ${this.guestFields.includes('email') ? html`<label><input type="checkbox" name="notify" class="vnotify" ?disabled=${this.submitting} />有回复时邮件通知</label>` : nothing}
+          <button
+            class="vbtn vsubmit"
+            type="button"
+            ?disabled=${this.submitting}
+            @click=${() => {
+              if (!this.submitting) this.onSubmit(this.snapshot())
+            }}
+          >
+            ${this.submitting ? '发送中…' : '发送'}
+          </button>
+        </div>
+      </div>`,
       this.container
     )
   }
-
   setReply(nick: string | null) {
     this.replyNick = nick
     this.render()
   }
-
   focus() {
-    this.textarea.value?.focus({ preventScroll: true })
+    this.container
+      .querySelector<HTMLTextAreaElement>('.veditor')
+      ?.focus({ preventScroll: true })
   }
-
-  setSubmitting(submitting: boolean) {
-    this.submitting = submitting
-    if (submitting) this.emojiOpen = false
+  setSubmitting(value: boolean) {
+    this.submitting = value
     this.render()
   }
-
   clear() {
-    this.textarea.value!.value = ''
+    this.container.querySelector<HTMLTextAreaElement>('.veditor')!.value = ''
   }
-
   destroy() {
     this.events.abort()
     render(nothing, this.container).setConnected(false)

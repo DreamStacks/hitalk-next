@@ -58,9 +58,9 @@
 .playground button {
   -webkit-tap-highlight-color: transparent;
 }
-.playground :focus-visible {
-  outline: 2px solid var(--page-accent);
-  outline-offset: 4px;
+.playground :where(a, button):focus-visible {
+  outline: 1px solid var(--page-accent);
+  outline-offset: 2px;
 }
 .playground ::selection {
   background: var(--page-tint);
@@ -292,6 +292,7 @@
   --ht-header: var(--page-ink);
   --ht-muted: var(--page-muted);
   --ht-accent: var(--page-accent);
+  --ht-accent-text: var(--page-surface);
   --ht-danger: var(--page-rose);
   --ht-tag-bg: var(--page-rose);
   --ht-tag-color: var(--page-surface);

@@ -53,10 +53,14 @@ test('standalone browser bundle renders, preserves drafts and respects hidden bu
   )
   dom.window.document.head.append(style)
   let likeRequests = 0
+  Object.defineProperty(dom.window.navigator, 'locks', {
+    value: { request: async (_key, fn) => fn() },
+  })
+  dom.window.Headers = Headers
   dom.window.fetch = async url => {
     if (String(url).endsWith('/like')) {
       likeRequests++
-      return json({ success: true, like_count: likeRequests })
+      return json({ liked: true, like_count: likeRequests })
     }
     return json(list([comment()]))
   }
@@ -70,6 +74,22 @@ test('standalone browser bundle renders, preserves drafts and respects hidden bu
   })
   await tick()
   const document = dom.window.document
+  const css = selector =>
+    dom.window.getComputedStyle(document.querySelector(selector))
+  assert.equal(css('.vnick').borderTopWidth, '0px')
+  assert.equal(css('.veditor').resize, 'vertical')
+  assert.equal(css('.vmeta').display, 'flex')
+  assert.equal(css('.vquote').listStyle, 'none')
+  assert.equal(css('.vlike').borderTopWidth, '0px')
+  const emojiToggle = document.querySelector('[aria-label="插入表情"]')
+  emojiToggle.click()
+  assert.equal(emojiToggle.getAttribute('aria-expanded'), 'true')
+  assert.notEqual(css('.smiles-body').display, 'none')
+  assert.equal(css('.smiles-items-show').display, 'grid')
+  const emoji = document.querySelector('button.smiles-item')
+  emoji.click()
+  assert.equal(document.querySelector('.smiles-body'), null)
+  assert.ok(document.querySelector('.veditor').value.includes('@('))
   const textarea = document.querySelector('.veditor')
   textarea.value = 'draft from the shipped bundle'
   document.querySelector('.vat').click()
@@ -97,7 +117,7 @@ test('published declarations typecheck without workspace or dependency access', 
   writeFileSync(
     join(directory, 'consumer.ts'),
     `import { mount, getCommentCounts, fillCommentCounts, normalizePagePath, type GuestField, type CommentCreateRequest } from './hitalk';
-const request: CommentCreateRequest = { path: '/article', nick: 'Reader', content: '**hello**' };
+const request: CommentCreateRequest = { path: '/article', nick: 'Reader', content: '**hello**', client_request_id: '1e1f7c29-b990-438c-aec2-5d5f647994bd' };
 const guestFields: GuestField[] = ['nick', 'email'];
 const instance = mount('#comments', { server: 'https://example.com', path: normalizePagePath(request.path), guestFields });
 void getCommentCounts('https://example.com', ['/article']);

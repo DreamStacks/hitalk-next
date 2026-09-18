@@ -69,7 +69,9 @@ export const commentCreateSchema: v.GenericSchema<
   title: optionalText('title', 200),
   email: optionalValidText(emailSchema),
   website: optionalValidText(websiteSchema),
-  parent_id: optionalText('parent_id', 128),
+  reply_to_id: optionalText('reply_to_id', 128),
+  client_request_id: v.pipe(v.string(), v.uuid('请求标识无效')),
+  notify: v.optional(v.boolean()),
 })
 export const parseCommentInput = (value: unknown) =>
   v.safeParse(commentCreateSchema, value)

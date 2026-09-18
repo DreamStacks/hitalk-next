@@ -6,7 +6,14 @@ export const tick = async () => {
 }
 export const comment = (overrides = {}) => ({
   id: '123-nanoid',
-  parent_id: null,
+  sequence: 1,
+  root_id: null,
+  reply_to: null,
+  deleted: false,
+  status: 'published',
+  liked: false,
+  can_reply: true,
+  can_delete: false,
   nick: 'Reader',
   avatar_hash: 'a'.repeat(32),
   content_html: '<p>hello</p>',
@@ -15,14 +22,17 @@ export const comment = (overrides = {}) => ({
   is_pinned: false,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
-  children: [],
+  replies: [],
+  reply_count: 0,
+  reply_cursor: null,
   ...overrides,
 })
-export const list = (comments, page = 1, more = false) => ({
+export const list = (comments, cursor = null) => ({
   comments,
+  pinned: [],
   total: comments.length,
-  page_info: { path: '/article', comment_count: comments.length },
-  pagination: { page, page_size: 10, has_more: more },
+  next_cursor: cursor,
+  comments_enabled: true,
 })
 export const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {

@@ -4,13 +4,8 @@ import './theme'
 
 const container = document.querySelector<HTMLElement>('#comment')!
 const instance = mount(container, {
-  // server:
-  //   import.meta.env.VITE_API_URL?.trim() ||
-  //   (import.meta.env.DEV
-  //     ? `${location.origin}/api`
-  //     : 'https://hitalk-next-api.ihoey.com'),
-  server: 'https://hitalk-next-api.ihoey.com',
-  path: '/',
+  server: import.meta.env.VITE_API_URL?.trim() || '/api',
+  path: import.meta.env.VITE_PAGE_PATH?.trim() || '/playground',
   title: 'Hitalk 开发示例',
   placeholder: '来都来了，留个爪印吧～',
   avatar: 'mm',

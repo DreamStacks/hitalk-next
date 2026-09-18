@@ -1,4 +1,4 @@
-import { HTTPException } from 'hono/http-exception'
+import { fail } from './errors'
 import {
   parseCommentInput,
   parsePagePath,
@@ -6,7 +6,7 @@ import {
 } from '@hitalk/shared'
 
 export function badRequest(message: string): never {
-  throw new HTTPException(400, { message })
+  fail(400, 'INVALID_INPUT', message)
 }
 
 export function pagePath(value: unknown): string {

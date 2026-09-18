@@ -1,40 +1,29 @@
-# Hitalk v2
+# Hitalk
 
-面向单个博客的轻量、自托管评论系统。后端使用 Cloudflare Workers + D1，前端是可嵌入页面的 TypeScript SDK。
+面向单个博客的轻量评论系统。Hono + Cloudflare Workers + D1 服务端，框架无关的 TypeScript + lit-html 嵌入式 SDK。
 
-目前支持评论、两级显示的回复树、点赞、置顶/删除、邮件通知、表情和明暗主题。当前开发重点是稳定性；登录系统、更多插件和复杂管理后台暂缓。
+当前采用全新数据库结构和单一 `/api` 协议，不提供旧字段、旧接口或旧库迁移兼容。匿名身份自动建立，无注册表单、无验证码。视觉验收由项目维护者完成，自动化测试覆盖身份、权限、并发、生命周期和数据完整性。
 
 ## 本地开发
 
-使用 Node.js 22.22.2+（22 LTS）和 pnpm 10.28.2。
+Node.js 22.22.2+，pnpm 10.28.2：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-`pnpm dev` 自动创建缺失的 `apps/server/.dev.vars`（随机本地管理员令牌与 IP 盐，默认关闭邮件），保留已有配置，并应用本地 D1 迁移，然后同时启动：
+自动生成缺失的本地管理令牌和 IP 盐，应用本地迁移，启动：
 
-- 开发示例：[http://127.0.0.1:5173](http://127.0.0.1:5173)，入口为 `examples/playground/index.html`。
-- Worker API：[http://127.0.0.1:8787](http://127.0.0.1:8787)。管理页为 `/admin`，令牌从本地 `.dev.vars` 的 `ADMIN_TOKEN` 读取。
+- 示例：`http://127.0.0.1:5173`。
+- API：`http://127.0.0.1:8787/api`。
+- 管理：`http://127.0.0.1:8787/admin`，令牌取自本地 `apps/server/.dev.vars`。
 
-前端直接加载 SDK 源码，无需先构建：CSS 保存后即时更新；TS 保存后自动销毁并重新挂载评论组件，保留未提交的昵称、邮箱、网址和正文。重新挂载会重置回复目标和分页；HTML 修改触发整页刷新。后端由 Wrangler 自动重载。Vite 保留 `/api` 到本地 Worker 的代理，但当前示例的 `server` 固定为线上 API，`path` 为 `/`；页面提交和点赞会作用于线上数据。本地后端修改不会反映到该页面，只有将 `server` 切到 `/api` 后才使用本地 Worker。
+示例默认通过 Vite `/api` 代理访问本地 Worker，评论路径为 `/playground`。`pnpm db:seed` 加载虚构演示数据，可重复执行。新配置使用独立的 `hitalk-fresh` 本地数据库标识，不删除或读取原本的本地数据库。邮件默认关闭。
 
-按 Ctrl+C 一起停止服务；任一服务退出会结束另一服务。前端端口固定为 5173，避免端口被占用时悄悄切换。本地 Worker 的数据保留在本地 D1，下次启动不会清空；与当前示例页面读取的生产数据分开。
+前端可用 `VITE_API_URL`、`VITE_PAGE_PATH` 配置。API 地址必须包含 `/api`，例如 `https://comments.example.com/api`；远端必须 HTTPS。本地无需配置这些变量。静态部署前显式指定 API 地址，GitHub Pages 工作流读取仓库变量 `HITALK_API_URL`。
 
-也可分开运行 `pnpm dev:server`、`pnpm dev:web`；首次单独启动前执行 `pnpm dev:setup`。SDK 发布产物仍使用 `pnpm build`，若需持续构建产物则执行 `pnpm --filter @hitalk/sdk dev`。自动化测试监听使用 `pnpm test:watch`。
-
-需要演示数据时，在根目录执行：
-
-```sh
-pnpm db:seed
-```
-
-向本地 `/playground` 导入 12 条根评论、4 条回复和 10 条点赞，包含置顶、Markdown、表情、长文与分页场景。数据均为虚构；重复执行不会重复插入或覆盖已有评论。该命令只操作本地 D1，不会发送邮件。数据源为 `examples/playground/seed.sql`。当前示例连接线上 API 且读取 `/`，刷新不会显示这份本地数据；查看 seed 需将示例 `server` 切到 `/api`，并将 `path` 设为 `/playground`。两种模式的配置统一尚待处理。
-
-## 嵌入 SDK
-
-同时托管构建生成的 `hitalk.js` 和 `hitalk.css`：
+## 嵌入
 
 ```html
 <link rel="stylesheet" href="/assets/hitalk.css" />
@@ -42,137 +31,97 @@ pnpm db:seed
 <script src="/assets/hitalk.js"></script>
 <script>
   const comments = Hitalk.mount('#comments', {
-    server: 'https://your-worker.workers.dev',
+    server: 'https://comments.example.com/api',
     path: location.pathname,
     title: document.title,
     pageSize: 10,
-    avatar: 'mm',
     guestFields: ['nick', 'email', 'website'],
   })
-  // SPA 页面卸载前调用 comments.destroy()
-  // 重新读取第一页调用 await comments.refresh()
+  // SPA 离开页面时 comments.destroy()
+  // 同一页面重新读取：await comments.refresh()
 </script>
 ```
-
-`pageSize` 为每页根评论数（1–50），每个根评论携带全部回复。SDK 提供“加载更多”。回复显示“回复 @昵称”，点击可定位并展开实际被回复的评论；多层回复仍平铺为第二层，定位不会清空草稿。
-
-`guestFields` 默认显示昵称、邮箱、网址，可按数组顺序选择，例如 `['nick', 'email']` 隐藏网址，`[]` 隐藏全部访客字段。隐藏字段不会从缓存提交；隐藏昵称时使用 `Guest`。这是界面配置，服务端仍按统一规则校验请求。
-
-`path` 应是以 `/` 开头的页面路径，不包含查询参数、片段或空白；同一个 Worker 对应一个站点。SDK 的显式/默认路径、服务端读取/提交/计数都将末尾 `/index.html`、`/index.htm` 归一化为 `/`，例如 `/posts/index.html` 与 `/posts/` 共用评论。`/posts` 与 `/posts/` 仍是不同路径，大小写和编码不自动改写。
-
-SDK 同时产出 ESM、可直接通过 script 加载的 IIFE 和独立类型声明。npm 消费方式：
 
 ```ts
 import { mount } from '@hitalk/sdk'
 import '@hitalk/sdk/hitalk.css'
 ```
 
-SDK 使用 lit-html 管理模板与局部 DOM 更新，渲染器已包含在 ESM/IIFE 产物中，无需宿主单独加载。接入 React 时在 effect 中挂载并在清理函数中销毁；Vue 使用 onMounted/onBeforeUnmount；Hexo 等静态站点使用上面的 script 方式。宿主框架只管理挂载容器，不渲染容器内部内容。
+SDK 同时构建 ESM、IIFE、独立 CSS 和类型声明。ESM 可在 SSR 环境导入，mount 在浏览器运行；不提供服务端渲染。宿主只管理挂载容器，组件内部由 SDK 管理。支持当前具备 Web Crypto、Web Locks 的现代浏览器；部署使用 HTTPS。
 
-ESM 可在没有 DOM 的服务端环境导入，但 mount 只能在浏览器执行；SDK 不提供服务端评论渲染或 hydration。SPA 切换文章路径时销毁并重新挂载，refresh 只刷新当前路径。
+`pageSize` 为根评论数，默认 10、最大 20；每根先展示 3 条回复，再独立分页加载。根评论和回复保留真实回复对象，未加载目标通过定位接口获取。置顶不改变普通评论的分页顺序。
 
-构建产物可打包，但本仓库的构建和检查命令不会发布 npm 包。
+`guestFields` 控制字段显示与顺序，`[]` 隐藏全部访客字段并使用 Guest 昵称。隐藏字段不从缓存补交。支持 Markdown、表情、头像和浏览器/系统展示；Markdown 由服务端清洗，原始 HTML 不执行。
 
-### 文章列表评论数
+## 匿名身份与作者权限
 
-无需挂载评论编辑器。给文章计数元素设置路径，在列表渲染完成后调用（需先加载 SDK 脚本）：
+第一次发表评论或点赞前，SDK 用 Web Crypto 生成 32 字节随机 token，先写入 localStorage，再发送请求；服务端只保存 SHA-256 摘要，在有效写入的同一事务内创建身份。多标签页通过 Web Locks 避免首次初始化竞争。仅阅读不创建身份。
+
+同一浏览器、同一宿主 origin、同一 API 地址下复用身份，可删除自己的评论、点赞和取消点赞。清除浏览器数据、更换浏览器或改变域名后是新身份；昵称、邮箱和 IP 均不能用于认领原来的评论。没有账户恢复或跨设备同步。
+
+localStorage 凭证可以被宿主脚本读取，因此宿主必须可信；它仅拥有访客权限，绝不能保存管理令牌。浏览器不能持久保存凭证时，写入会被阻止并保留草稿。
+
+作者删除清空该条正文和个人信息，保留引用及幂等标识。其他人的回复仍在；空讨论串不再展示，仍有回复的根评论显示删除占位。删除占位不计入公开评论数。
+
+## 提交、审核和分页
+
+每次新提交带随机 `client_request_id`，数据库按作者和请求 ID 去重。超时重试沿用同一请求，改变正文或回复目标会生成新请求。相同请求 ID、不同内容返回 409。已删除评论保留去重记录，不会因旧请求重放而重新出现。
+
+草稿与未确认提交保存在会话存储；成功后清理。发送成功直接合并到当前讨论串，不跳回第一页。列表同步失败与发表失败分别提示。昵称等选填资料使用独立本地缓存。
+
+默认直接发布；`MODERATION_MODE=pre` 开启先审后发。作者可以在当前页面看到最近 20 条自己的待审核回执；其他访客看不到。管理员可发布、隐藏、标记垃圾、置顶、封禁身份和关闭单页评论。隐藏根评论隐藏整串；隐藏某条回复只隐藏该条，其他回复保留并将引用显示为不可用。
+
+根列表按单调 sequence 倒序，回复按 sequence 正序；游标绑定页面或讨论串，并带创建水位。新发布内容刷新后进入当前分页，删除和审核状态仍会实时变化，不是完整历史快照。
+
+## API
+
+| 接口                                                    | 行为                                                         |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| GET /api/config                                         | 公开配置                                                     |
+| GET /api/comments?path=/post&limit=10&cursor=…          | 根评论、置顶、回复预览、公开总数                             |
+| GET /api/threads/:rootId/replies?cursor=…&limit=20      | 回复分页，最大 50 条                                         |
+| GET /api/comments/:id/context                           | 首屏回复预览加定位目标，保持后续回复可加载                   |
+| POST /api/comments                                      | 创建评论或回复，必须提供匿名 Bearer 凭证和 client_request_id |
+| PUT /api/comments/:id/like                              | 确保已点赞                                                   |
+| DELETE /api/comments/:id/like                           | 确保已取消点赞                                               |
+| DELETE /api/comments/:id                                | 删除自己的内容                                               |
+| GET /api/comments/count?paths[]=/a&paths[]=/b           | 最多 50 个路径的公开计数                                     |
+| GET /api/me                                             | 当前匿名身份状态                                             |
+| GET /api/me/comments?path=/post&status=pending&before=… | 当前作者的私有列表                                           |
+| GET /api/admin/comments                                 | 管理列表，支持 path/status/before                            |
+| POST /api/admin/comments                                | 管理员发表或回复，作者由服务端确定                           |
+| PATCH /api/admin/comments/:id                           | 审核状态或置顶                                               |
+| DELETE /api/admin/comments/:id                          | 管理员删除单条内容                                           |
+| PATCH /api/admin/identities/:id                         | active/blocked                                               |
+| PATCH /api/admin/pages                                  | 页面评论开关                                                 |
+| GET /api/admin/notifications                            | 通知任务状态                                                 |
+
+公开 API 不暴露邮箱、UA 原文、作者数据库 ID、token 摘要、请求摘要和 Markdown 原文。管理接口只接受管理 Bearer 令牌，管理页仅在内存保存。所有响应默认 no-store，防止带访问者权限的响应被共享缓存。
+
+路径以 `/` 开头，不含查询参数、片段、反斜杠和空白；末尾 index.html/index.htm 统一移除，其他尾斜杠、大小写不自动合并。输入限制：昵称 80、标题 200、正文 20,000、邮箱 254、网址 2,048、路径 1,024 字符；请求体 128 KiB。
+
+## 文章列表计数
 
 ```html
-<span class="hitalk-comment-count" data-xid="/posts/hello/index.html">—</span>
+<span class="hitalk-comment-count" data-xid="/posts/hello/">—</span>
 <script>
-  Hitalk.fillCommentCounts({ server: 'https://your-worker.workers.dev' }).catch(
-    console.error
-  )
+  Hitalk.fillCommentCounts({
+    server: 'https://comments.example.com/api',
+  }).catch(console.error)
 </script>
 ```
 
-`fillCommentCounts` 自动扫描并填充计数，默认扫描 document，也可传入 `root` 限定列表容器。自动合并重复路径，每批最多查询 50 个路径；全部请求成功后更新文本，失败时保留原文并拒绝 Promise。SPA 列表切换后重新调用，未查询到评论的页面显示 `0`。若只需要数据：
+独立计数 API 不创建编辑器，自动合并路径并按 50 个分批查询；失败保留原文本。也可使用 `getCommentCounts` 和 `normalizePagePath`。
 
-```ts
-import {
-  getCommentCounts,
-  fillCommentCounts,
-  normalizePagePath,
-} from '@hitalk/sdk'
-
-const counts = await getCommentCounts('https://your-worker.workers.dev', [
-  '/posts/hello/index.html',
-])
-console.log(counts['/posts/hello/']) // 返回值使用归一化后的路径作为键
-await fillCommentCounts({
-  server: 'https://your-worker.workers.dev',
-  root: document.querySelector('#articles')!,
-})
-normalizePagePath('/posts/hello/index.htm') // /posts/hello/
-```
-
-`normalizePagePath` 也可供未来导入工具使用。含查询参数或片段的路径会抛错，导入前应显式确认其归属；本次规则不会自动合并数据库里已经存在的页面。
-
-### 评论正文
-
-支持 Markdown 表格（含列对齐）、分隔线、有序列表起始序号、代码、引用、图片及表情。表格在窄屏内横向滚动。正文网页链接（包括相对路径）在新标签页打开并带 `nofollow noopener noreferrer`；`#片段` 保留页内跳转，邮件链接保留原行为。所有正文仍经过服务端清洗，不支持直接输入 HTML。
-
-## API 契约
-
-| 接口                                          | 行为                                                                                   |
-| --------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `GET /comments?path=/post&page=1&pageSize=10` | 根评论分页、完整回复、总评论数及 `pagination.has_more`；读取不会创建页面               |
-| `POST /comments`                              | 创建评论；请求包含 `path / nick / content`，可选 `title / email / website / parent_id` |
-| `POST /comments/:id/like`                     | 同一 IP 标识重复点赞返回 `success: false`，不增加计数                                  |
-| `GET /comments/count?paths[]=/a&paths[]=/b`   | 批量计数，每次 1–50 个路径                                                             |
-| `PUT /comments/:id/pin`                       | 管理员置顶，JSON 为 `{ "is_pinned": true }`                                            |
-| `DELETE /comments/:id`                        | 管理员删除评论及全部后代回复，同时维护计数                                             |
-| `GET /admin/api/comments?page=1&pageSize=50`  | 管理员分页查询，返回 `{ comments, has_more }`                                          |
-
-管理接口仅接受 `Authorization: Bearer <ADMIN_TOKEN>`。未配置令牌时拒绝管理访问；URL 中的 token 不再支持。
-
-公开响应只含展示字段；不返回邮箱、原始 UA、IP 标识、Markdown 原文或数据库页面 ID。头像使用服务端生成的 `avatar_hash`；昵称不再链接到邮箱。邮箱仍保存在数据库，用于可选的回复通知；保存请求头中的 UA（最多 2,048 字符），用于展示浏览器与操作系统；不存储评论 IP 或 HTML 副本。公开的可选 `client` 字段包含 `browser` 与 `os` 展示文本；UA 缺失或未知时不展示，UA 不能作为可信身份或精确设备信息。头像摘要不是匿名化保证，Gravatar/CDN 仍是第三方服务。
-
-输入限制：昵称 80 字符、标题 200、正文 20,000、邮箱 254、网址 2,048、路径 1,024；请求体最多 128 KiB。网址仅允许无用户名/密码的 HTTP/HTTPS 地址。回复必须属于同一页面，最大链长 8 条（含根评论，为 D1 级联删除保留触发器深度余量）。
-
-## 检查与交付
+## 检查与维护
 
 ```sh
-pnpm check                         # 类型感知 Lint、格式、类型检查、构建、测试及覆盖率
-pnpm --filter @hitalk/server build # Worker 打包检查，不部署
-pnpm test:worker                   # 隔离的真实 Worker/D1 集成与备份恢复演练
+pnpm check
+pnpm test:worker
+pnpm --filter @hitalk/server build
+pnpm build:web
 ```
 
-CI 执行上述三项，并构建示例前端。`test:worker` 创建临时配置和本地数据库，使用测试令牌，不访问现有数据库、不发送邮件，结束后清理临时文件。
+常规测试包括真实 workerd/D1、SDK jsdom、管理页、IIFE/ESM/声明、seed 和备份恢复。独立 Worker 测试在临时目录启动 Wrangler 并导出/恢复备份，不读取现有数据库或邮件凭据。视觉与布局验收由用户完成。
 
-Vitest 统一运行测试：后端在 workerd + 本地 D1 中执行，前端在 jsdom 中验证源码交互与 IIFE 产物，备份在 Node SQLite 中独立恢复。测试覆盖鉴权、字段泄漏、输入校验、计数、回复归属、XSS、SDK 状态/销毁及发布包类型。`test:worker` 使用独立的 Vitest 集成测试配置，验证完整 Wrangler 启动、迁移和备份导出链路，并在测试结束或失败时清理进程与临时目录。
-
-`pnpm test:watch` 进入交互测试；`pnpm test:coverage` 生成 `coverage/index.html`。覆盖率门槛为行 85%、语句/函数 80%、分支 60%。测试只使用固定假令牌和临时本地数据，不读取开发邮件密钥。
-
-## 部署与维护
-
-开发示例可单独构建为静态前端，由 GitHub Pages 托管，后端继续运行在 Cloudflare Workers + D1：
-
-```sh
-pnpm build:web    # 输出 dist/web
-pnpm preview:web # 本地预览生产构建 http://127.0.0.1:4173
-```
-
-当前开发页面和生产构建均连接 `https://hitalk-next-api.ihoey.com`，评论页面标识为 `/`。`examples/playground/main.ts` 中读取 `VITE_API_URL` 的逻辑目前被注释，因此 Pages 工作流中的同名变量暂不生效。资源使用相对路径，同时适用于 GitHub 项目子路径与独立域名。
-
-仓库包含手动触发的 `Deploy frontend to GitHub Pages` 工作流，检查通过后仅上传 `dist/web`。Pages 使用 GitHub Actions 发布源，从 Actions 选择 `main` 运行该工作流。前端发布地址为 [留言小院](https://hitalk-next.ihoey.com/)。本仓库已公开，使用 GitHub Free 的 Pages；完整步骤见 [运维说明](docs/operations.md#github-pages-前端)。
-
-首次部署和备份恢复请阅读 [运维说明](docs/operations.md)。旧系统评论已完成一次性导入，不提供旧 API/SDK 兼容层或通用迁移工具。
-
-配置说明见 [后端 README](apps/server/README.md)。本地迁移默认使用 `--local`，生产变更使用明确带 `:remote` 的命令。
-
-## 架构与范围
-
-```text
-apps/server/src/routes/    请求校验、鉴权与响应
-apps/server/src/lib/       数据访问、公开字段映射、Markdown、插件调用
-apps/server/src/plugins/   可选邮件通知
-apps/server/migrations/    版本化数据库结构、约束和计数触发器
-packages/shared/          公开 API 类型与 Valibot 输入校验
-packages/sdk/src/         请求、状态、渲染与组件生命周期
-examples/playground/      Vite 开发示例、热更新入口
-tests/                    Vitest：SDK、发布产物、后端、备份和真实 CLI 集成
-scripts/                  本地开发初始化与备份恢复校验 CLI
-```
-
-当前进展与下一步见 [路线图](docs/roadmap.md)。技术栈版本与取舍见 [依赖决策](docs/dependencies.md)，架构与剩余限制见 [维护说明](docs/architecture.md)。邮件为尽力发送，尚无持久队列、自动重试或投递状态；匿名提交尚无限流、验证码与审核，试运行期间应优先补齐入口防滥用。分页限制根评论数，不限制单个讨论串的回复数量。Markdown 是唯一持久化的评论内容。
+部署配置、邮件和备份见 [运维说明](docs/operations.md)，模块职责和数据不变量见 [架构说明](docs/architecture.md)，实现范围见 [路线图](docs/roadmap.md)。

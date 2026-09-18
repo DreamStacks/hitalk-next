@@ -20,9 +20,4 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
-
-  .Hitalk .vimg:hover,
-  .Hitalk .smiles-item:hover {
-    transform: none;
-  }
 }

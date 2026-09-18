@@ -13,38 +13,25 @@ export function verifyBackup(sql) {
       throw new Error('SQLite integrity check failed')
     if (db.prepare('PRAGMA foreign_key_check').all().length)
       throw new Error('Foreign key check failed')
-    const counts = db
-      .prepare(
-        `SELECT COUNT(*) AS total FROM pages p WHERE comment_count != (SELECT COUNT(*) FROM comments WHERE page_id=p.id)`
-      )
+    const invalid = db
+      .prepare(`SELECT COUNT(*) AS n FROM comments c LEFT JOIN comments r ON r.id=c.root_id LEFT JOIN comments p ON p.id=c.reply_to_id
+      WHERE c.root_id IS NOT NULL AND (r.root_id IS NOT NULL OR r.page_id!=c.page_id OR p.page_id!=c.page_id OR COALESCE(p.root_id,p.id)!=r.id OR p.seq>=c.seq)`)
       .get()
-    if (counts.total) throw new Error('Comment counters are inconsistent')
-    const likes = db
-      .prepare(
-        `SELECT COUNT(*) AS total FROM comments c WHERE like_count != (SELECT COUNT(*) FROM comment_likes WHERE comment_id=c.id)`
-      )
-      .get()
-    if (likes.total) throw new Error('Like counters are inconsistent')
-    const invalidParents = db
-      .prepare(
-        `SELECT COUNT(*) AS total FROM comments c JOIN comments p ON p.id=c.parent_id WHERE c.page_id != p.page_id`
-      )
-      .get()
-    if (invalidParents.total) throw new Error('Cross-page replies found')
-    const cycles = db
-      .prepare(`WITH RECURSIVE ancestry(start,id) AS (
-      SELECT id,parent_id FROM comments WHERE parent_id IS NOT NULL UNION
-      SELECT ancestry.start,c.parent_id FROM comments c JOIN ancestry ON c.id=ancestry.id WHERE c.parent_id IS NOT NULL
-    ) SELECT COUNT(*) AS total FROM ancestry WHERE start=id`)
-      .get()
-    if (cycles.total) throw new Error('Cyclic replies found')
+    if (invalid.n) throw new Error('Invalid thread relationships')
+    if (
+      !db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type='view' AND name='visible_comments'"
+        )
+        .get()
+    )
+      throw new Error('Missing visibility view')
     const expectedTriggers = [
       'comments_parent_insert',
       'comments_identity_update',
-      'comments_count_insert',
-      'comments_count_delete',
-      'likes_count_insert',
-      'likes_count_delete',
+      'comments_write_guard',
+      'likes_write_guard',
+      'comments_pin_limit',
     ]
     const triggers = new Set(
       db
@@ -55,7 +42,13 @@ export function verifyBackup(sql) {
     for (const name of expectedTriggers)
       if (!triggers.has(name)) throw new Error(`Missing trigger: ${name}`)
     return Object.fromEntries(
-      ['pages', 'comments', 'comment_likes'].map(table => [
+      [
+        'identities',
+        'pages',
+        'comments',
+        'comment_likes',
+        'notification_jobs',
+      ].map(table => [
         table,
         db.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get().total,
       ])

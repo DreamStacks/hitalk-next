@@ -1,32 +1,29 @@
-/**
- * Hitalk v2 共享类型定义
- * 前后端共用的数据模型和 API 接口定义
- */
-
-// ============ 数据模型 ============
-
-/** Public response only. Database records and notification addresses stay on the server. */
+/** The single public API contract. Internal records never cross this boundary. */
+export type ModerationStatus = 'published' | 'pending' | 'hidden' | 'spam'
 export interface Comment {
+  sequence: number
   id: string
-  parent_id: string | null
+  root_id: string | null
+  reply_to: { id: string; nick: string; available: boolean } | null
   nick: string
   website?: string
   avatar_hash: string
   content_html: string
+  deleted: boolean
+  status: ModerationStatus
   like_count: number
+  liked: boolean
+  can_delete: boolean
+  can_reply: boolean
   is_pinned: boolean
   is_admin: boolean
   created_at: string
   updated_at: string
-  /** Parsed User-Agent labels. Raw UA stays on the server. */
   client?: { browser?: string; os?: string }
-  // 前端渲染时添加
-  children?: Comment[]
+  replies?: Comment[]
+  reply_count?: number
+  reply_cursor?: string | null
 }
-
-// ============ API 请求/响应类型 ============
-
-// 创建评论请求
 export interface CommentCreateRequest {
   path: string
   title?: string
@@ -34,60 +31,47 @@ export interface CommentCreateRequest {
   email?: string
   website?: string
   content: string
-  parent_id?: string
+  reply_to_id?: string
+  client_request_id: string
+  notify?: boolean
 }
-
-// 评论列表响应
 export interface CommentListResponse {
   comments: Comment[]
+  pinned: Comment[]
   total: number
-  pagination: { page: number; page_size: number; has_more: boolean }
-  page_info: {
-    path: string
-    title?: string
-    comment_count: number
-  }
+  next_cursor: string | null
+  comments_enabled: boolean
 }
-
-// 评论数批量查询响应
+export interface ReplyListResponse {
+  comments: Comment[]
+  next_cursor: string | null
+}
+export interface CommentContextResponse {
+  root: Comment
+  target_id: string
+}
 export interface CommentCountResponse {
   [path: string]: number
 }
-
-// 点赞请求响应
 export interface LikeResponse {
-  success: boolean
+  liked: boolean
   like_count: number
 }
-
-// 错误响应
 export interface ErrorResponse {
-  error: string
+  code: string
   message: string
+  request_id: string
 }
-
-// 成功响应 (通用)
-export interface SuccessResponse {
-  success: boolean
-  message?: string
-}
-
-// ============ SDK 配置类型 ============
-
 export type GuestField = 'nick' | 'email' | 'website'
-
 export interface HitalkOptions {
-  server: string // API 服务器 URL
-  path?: string // 页面路径,默认 location.pathname
-  title?: string // 页面标题
-  placeholder?: string // 编辑器占位文本
+  server: string
+  path?: string
+  title?: string
+  placeholder?: string
   avatar?: 'mm' | 'identicon' | 'monsterid' | 'wavatar' | 'retro' | 'hide'
-  pageSize?: number // 每页根评论数，默认 10，最大 50；回复随根评论返回
-  guestFields?: readonly GuestField[] // 默认全部显示；空数组为匿名评论，不读取隐藏字段的缓存
+  pageSize?: number
+  guestFields?: readonly GuestField[]
 }
-
-// ============ 工具类型 ============
-
 export interface UserInfo {
   nick: string
   email: string

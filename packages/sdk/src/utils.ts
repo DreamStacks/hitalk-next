@@ -1,18 +1,3 @@
-import { isValidEmail, isValidWebsite } from '@hitalk/shared'
-
-/**
- * 邮件验证
- */
-export const check = {
-  mail(mail: string): { k: boolean; v: string } {
-    return { k: isValidEmail(mail), v: mail }
-  },
-
-  link(link: string): { k: boolean; v: string } {
-    return { k: isValidWebsite(link), v: link }
-  },
-}
-
 /**
  * 获取链接
  */

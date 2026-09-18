@@ -1,78 +1,55 @@
-import { beforeAll, afterAll, test } from 'vitest'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import { startWorker } from './helpers/worker.mjs'
 import { verifyBackup } from '../scripts/verify-backup.mjs'
-
-let worker
-beforeAll(async () => {
-  worker = await startWorker()
-})
-afterAll(async () => {
-  await worker?.dispose()
-})
-
-test('Wrangler migrations, HTTP API, concurrent likes, cascades and exported backup round trip', async () => {
-  async function request(path, options = {}, expected = 200) {
-    const response = await fetch(worker.url + path, {
-      ...options,
-      signal: AbortSignal.timeout(10000),
-    })
-    const body = await response.json()
-    assert.equal(response.status, expected, JSON.stringify(body))
-    return body
-  }
-  const post = body =>
-    request(
-      '/comments',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+test('Wrangler fresh migration, credential replay, flat replies and backup round trip', async t => {
+  const worker = await startWorker()
+  t.onTestFinished(() => worker.dispose())
+  const token = 'ht_' + 'C'.repeat(43)
+  const call = (path, method = 'GET', body) => {
+    const request = new Request(worker.url + path, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      201
-    )
-  const root = await post({
-    path: '/runtime',
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    return fetch(request)
+  }
+  const body = {
+    path: '/integration',
     nick: 'Reader',
-    email: 'reader@example.invalid',
-    content: '**hello**',
+    content: 'hello',
+    client_request_id: crypto.randomUUID(),
+  }
+  const responses = await Promise.all(
+    Array.from({ length: 5 }, () => call('/api/comments', 'POST', body))
+  )
+  for (const res of responses)
+    assert.equal(res.status, 201, await res.clone().text())
+  const root = await responses[0].json()
+  const childResponse = await call('/api/comments', 'POST', {
+    ...body,
+    client_request_id: crypto.randomUUID(),
+    reply_to_id: root.id,
   })
-  await post({
-    path: '/runtime',
-    nick: 'Reply',
-    content: 'reply',
-    parent_id: root.id,
-  })
+  assert.equal(childResponse.status, 201, await childResponse.clone().text())
+  const child = await childResponse.json()
   const likes = await Promise.all(
-    Array.from({ length: 8 }, () =>
-      request(`/comments/${root.id}/like`, { method: 'POST' })
+    Array.from({ length: 5 }, () =>
+      call(`/api/comments/${child.id}/like`, 'PUT')
     )
   )
-  assert.equal(likes.filter(result => result.success).length, 1)
-  assert.ok(likes.every(result => result.like_count === 1))
-  const list = await request('/comments?path=/runtime&pageSize=1')
-  assert.equal(list.total, 2)
-  assert.equal(list.comments[0].children.length, 1)
-  assert.ok(!('email' in list.comments[0]))
-  await request('/admin/api/comments', {}, 401)
-  await request('/comments', { method: 'POST', body: 'x'.repeat(140000) }, 413)
-  await request(`/comments/${root.id}`, {
-    method: 'DELETE',
-    headers: { Authorization: 'Bearer local-test-admin' },
-  })
-  assert.equal((await request('/comments?path=/runtime')).total, 0)
-  const kept = await post({
-    path: '/backup',
-    nick: 'Reader',
-    content: 'preserved',
-  })
-  await post({
-    path: '/backup',
-    nick: 'Reply',
-    content: 'preserved reply',
-    parent_id: kept.id,
-  })
-  await request(`/comments/${kept.id}/like`, { method: 'POST' })
-  const restored = verifyBackup(await worker.exportBackup())
-  assert.deepEqual(restored, { pages: 2, comments: 2, comment_likes: 1 })
+  for (const res of likes) assert.equal(res.status, 200)
+  let data = await (await call('/api/comments?path=/integration')).json()
+  assert.equal(data.total, 2)
+  assert.equal(data.comments[0].replies[0].like_count, 1)
+  assert.equal((await call(`/api/comments/${root.id}`, 'DELETE')).status, 200)
+  data = await (await call('/api/comments?path=/integration')).json()
+  assert.equal(data.total, 1)
+  assert.equal(data.comments[0].deleted, true)
+  const stats = verifyBackup(await worker.exportBackup())
+  assert.equal(stats.comments, 2)
+  assert.equal(stats.comment_likes, 1)
 })
