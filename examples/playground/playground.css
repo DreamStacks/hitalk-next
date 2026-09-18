@@ -17,16 +17,16 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --page-bg: #17231e;
-  --page-surface: #1e2c25;
-  --page-ink: #e2ede5;
-  --page-muted: #a7baad;
-  --page-accent: #a0d2b0;
-  --page-tint: #2c4034;
-  --page-border: #3b4f42;
-  --page-input: #23332a;
+  --page-bg: #15171c;
+  --page-surface: #1d2027;
+  --page-ink: #e4e7ee;
+  --page-muted: #a5adbc;
+  --page-accent: #a6b9e7;
+  --page-tint: #2b3346;
+  --page-border: #363c49;
+  --page-input: #242832;
   --page-rose: #efadc2;
-  --page-rose-tint: #413039;
+  --page-rose-tint: #382a34;
 }
 
 .playground {

@@ -12,6 +12,7 @@
   position: relative;
   padding-top: 24px;
   scroll-margin-block: 72px;
+  animation: hitalk-comment-enter 240ms ease-out;
 }
 
 .Hitalk .vimg {
@@ -316,4 +317,17 @@
     width: 24px;
     height: 24px;
   }
+}
+
+@keyframes hitalk-comment-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.Hitalk .hitalk-root[data-comments-enabled='false'] .vat {
+  display: none;
 }

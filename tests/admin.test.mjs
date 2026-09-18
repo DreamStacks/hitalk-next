@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
 import { adminPage } from '../apps/server/src/ui/admin-page.ts'
 import { tick, json, deferred } from './helpers/comments.mjs'
-function page(t, handler) {
+function page(t, handler, setup = () => {}) {
   const requests = []
   const dom = new JSDOM(adminPage, {
     url: 'https://example.com/admin',
     runScripts: 'dangerously',
     beforeParse(window) {
+      setup(window)
       window.fetch = async (url, init) => {
         requests.push({ url, init })
         return handler(url, init)
@@ -69,4 +70,60 @@ test('late administrative responses cannot reopen a logged-out panel', async t =
   wait.resolve(json({ comments: [], next: null }))
   await tick()
   assert.equal(doc.getElementById('panel').hidden, true)
+})
+
+test('admin theme follows the system until chosen and restores a saved choice', t => {
+  let systemChange
+  const { doc, dom, requests } = page(
+    t,
+    () => json({}),
+    window => {
+      window.matchMedia = () => ({
+        matches: true,
+        addEventListener: (_event, handler) => {
+          systemChange = handler
+        },
+      })
+    }
+  )
+  assert.equal(doc.documentElement.dataset.theme, 'dark')
+  systemChange({ matches: false })
+  assert.equal(doc.documentElement.dataset.theme, 'light')
+  doc.getElementById('theme-toggle').click()
+  assert.equal(doc.documentElement.dataset.theme, 'dark')
+  assert.equal(
+    doc.getElementById('theme-toggle').getAttribute('aria-label'),
+    '切换到浅色模式'
+  )
+  assert.equal(dom.window.localStorage.getItem('hitalk-admin-theme'), 'dark')
+  systemChange({ matches: false })
+  assert.equal(doc.documentElement.dataset.theme, 'dark')
+  const restored = page(
+    t,
+    () => json({}),
+    window => {
+      window.localStorage.setItem('hitalk-admin-theme', 'dark')
+    }
+  )
+  assert.equal(restored.doc.documentElement.dataset.theme, 'dark')
+  assert.equal(requests.length, 0)
+})
+
+test('admin theme switching works with unavailable local storage', t => {
+  const { doc } = page(
+    t,
+    () => json({}),
+    window => {
+      Object.defineProperty(window, 'localStorage', {
+        get() {
+          throw new Error('unavailable')
+        },
+      })
+    }
+  )
+  assert.equal(doc.documentElement.dataset.theme, 'light')
+  doc.getElementById('theme-toggle').click()
+  assert.equal(doc.documentElement.dataset.theme, 'dark')
+  doc.getElementById('theme-toggle').click()
+  assert.equal(doc.documentElement.dataset.theme, 'light')
 })

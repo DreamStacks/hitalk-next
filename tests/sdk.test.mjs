@@ -513,6 +513,7 @@ test('API malformed responses, errors and explicit destruction are handled', asy
 test('disabled page and invalid input never submit', async t => {
   const f = fixture(t, () => json({ ...list([]), comments_enabled: false }))
   await tick()
+  assert.equal(document.querySelector('.editor-container').hidden, true)
   f.submit()
   await tick()
   assert.equal(
@@ -521,6 +522,47 @@ test('disabled page and invalid input never submit', async t => {
   )
   assert.match(document.querySelector('.hitalk-status').textContent, /关闭/)
 })
+test('closing and reopening comments hides the editor without losing its draft', async t => {
+  let enabled = true
+  const f = fixture(t, () =>
+    json({ ...list([comment()]), comments_enabled: enabled })
+  )
+  assert.equal(document.querySelector('.editor-container').hidden, true)
+  await tick()
+  const editor = document.querySelector('.editor-container')
+  const textarea = document.querySelector('.veditor')
+  textarea.value = '保留这段草稿'
+  assert.equal(editor.hidden, false)
+  enabled = false
+  await f.instance.refresh()
+  assert.equal(editor.hidden, true)
+  assert.equal(
+    document.querySelector('.hitalk-root').dataset.commentsEnabled,
+    'false'
+  )
+  document.querySelector('.vat').click()
+  assert.equal(document.querySelector('.vreplying'), null)
+  enabled = true
+  await f.instance.refresh()
+  assert.equal(editor.hidden, false)
+  assert.equal(document.querySelector('.veditor'), textarea)
+  assert.equal(textarea.value, '保留这段草稿')
+  assert.match(document.querySelector('.hitalk-status').textContent, /重新开放/)
+})
+
+test('a page closed during submission hides the editor and keeps the rejected draft', async t => {
+  const f = fixture(t, (_url, init) =>
+    init.method === 'POST'
+      ? json({ code: 'COMMENTS_CLOSED', message: '评论已关闭' }, 403)
+      : json(list([]))
+  )
+  await tick()
+  f.submit('发送中关闭的草稿')
+  await tick()
+  assert.equal(document.querySelector('.editor-container').hidden, true)
+  assert.equal(document.querySelector('.veditor').value, '发送中关闭的草稿')
+})
+
 test('hidden guest fields cannot be restored or submitted from profile cache', async t => {
   const bodies = []
   const f = fixture(

@@ -7,7 +7,7 @@ function updateThemeButton() {
   button.setAttribute('aria-pressed', String(dark))
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', dark ? '#17231e' : '#f5f8f5')
+    ?.setAttribute('content', dark ? '#15171c' : '#f5f8f5')
 }
 
 updateThemeButton()

@@ -3,7 +3,26 @@ export const adminPage = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f5f8f5">
 <title>Hitalk · 评论管理</title>
+<script>
+const adminThemeMedia = window.matchMedia?.('(prefers-color-scheme: dark)');
+let adminThemePreference = null;
+try {
+  const stored = localStorage.getItem('hitalk-admin-theme');
+  if (stored === 'light' || stored === 'dark') adminThemePreference = stored;
+} catch {}
+function applyAdminTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#15171c' : '#f5f8f5';
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.textContent = theme === 'dark' ? '浅色模式' : '深色模式';
+    toggle.setAttribute('aria-label', theme === 'dark' ? '切换到浅色模式' : '切换到深色模式');
+  }
+}
+applyAdminTheme(adminThemePreference || (adminThemeMedia?.matches ? 'dark' : 'light'));
+</script>
 <style>
 :root {
   color-scheme: light;
@@ -20,7 +39,8 @@ export const adminPage = `<!doctype html>
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
 main { width: min(1200px, calc(100% - 64px)); margin: 48px auto; }
-.page-header { display: flex; align-items: baseline; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.page-header { display: flex; align-items: center; flex-wrap: wrap; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+#theme-toggle { margin-left: auto; font-size: 12px; }
 .brand { color: var(--accent); font-size: 24px; font-weight: 700; letter-spacing: -.04em; }
 h1 { margin: 0; font-size: 20px; font-weight: 600; }
 h2 { margin: 0; font-size: 15px; font-weight: 600; }
@@ -83,14 +103,14 @@ nav { display: flex; justify-content: center; margin-top: 20px; }
   td { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 8px 0; border: 0; }
   td::before { content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 400; }
 }
-@media (prefers-color-scheme: dark) {
-  :root { color-scheme: dark; --bg: #17231e; --surface: #1e2c25; --text: #e2ede5; --muted: #a7baad; --accent: #a0d2b0; --tint: #2c4034; --border: #3b4f42; --danger: #efadc2; }
+:root[data-theme="dark"] {
+  color-scheme: dark; --bg: #15171c; --surface: #1d2027; --text: #e4e7ee; --muted: #a5adbc; --accent: #a6b9e7; --tint: #2b3346; --border: #363c49; --danger: #efadc2;
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body><main>
-<header class="page-header"><span class="brand">Hitalk.</span><h1>评论管理</h1></header>
+<header class="page-header"><span class="brand">Hitalk.</span><h1>评论管理</h1><button id="theme-toggle" type="button" aria-label="切换到深色模式">深色模式</button></header>
 <form id="login">
   <div><h2>登录管理后台</h2><p>查看、审核和管理站点的评论。</p></div>
   <label>管理令牌<input id="token" type="password" autocomplete="off" placeholder="输入管理令牌" required></label>
@@ -110,6 +130,15 @@ nav { display: flex; justify-content: center; margin-top: 20px; }
   <section class="notification-section" aria-label="邮件通知任务"><button id="notifications">通知任务</button><pre id="jobs"></pre></section>
 </div>
 </main><script>
+applyAdminTheme(document.documentElement.dataset.theme);
+document.getElementById('theme-toggle').onclick = () => {
+  adminThemePreference = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyAdminTheme(adminThemePreference);
+  try { localStorage.setItem('hitalk-admin-theme', adminThemePreference); } catch {}
+};
+adminThemeMedia?.addEventListener('change', event => {
+  if (!adminThemePreference) applyAdminTheme(event.matches ? 'dark' : 'light');
+});
 let token='',next=null,generation=0;
 const $=id=>document.getElementById(id),statusEl=$('status'),list=$('list');
 const text=(tag,value)=>{const el=document.createElement(tag);el.textContent=value;return el};

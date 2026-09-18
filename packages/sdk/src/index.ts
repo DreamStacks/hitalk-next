@@ -98,6 +98,7 @@ export class Hitalk {
     this.shell()
     this.editorContainer = el.ownerDocument.createElement('div')
     this.editorContainer.className = 'editor-container'
+    this.editorContainer.hidden = true
     this.editorHome.value!.append(this.editorContainer)
     this.editor = new Editor(
       this.editorContainer,
@@ -272,8 +273,10 @@ export class Hitalk {
       ])
       this.cursor = result.next_cursor
       this.total = result.total
+      const wasEnabled = this.enabled
       this.enabled = result.comments_enabled
       if (!this.enabled) this.notice('此页面已关闭评论', 'warning')
+      else if (!wasEnabled) this.notice('评论已重新开放')
       if (this.firstLoad) {
         this.firstLoad = false
         const target = location.hash.slice(1)
@@ -306,7 +309,7 @@ export class Hitalk {
       active.focus({ preventScroll: true })
   }
   private reply(id: string, nick: string) {
-    if (this.submitting) return
+    if (this.submitting || !this.enabled) return
     this.store.setReplyTarget({ id, nick })
     this.editor.setReply(nick)
     this.update()
@@ -430,6 +433,8 @@ export class Hitalk {
         }
       }
     } catch (error) {
+      if (error instanceof APIError && error.code === 'COMMENTS_CLOSED')
+        this.enabled = false
       if (!this.destroyed)
         this.notice(
           error instanceof APIError
@@ -540,6 +545,9 @@ export class Hitalk {
   }
   private shell() {
     if (this.destroyed) return
+    this.view.dataset.commentsEnabled = String(this.enabled)
+    if (this.editorContainer)
+      this.editorContainer.hidden = this.firstLoad || !this.enabled
     render(
       html`<div ${ref(this.editorHome)} class="editor-home"></div>
         ${renderFeedback(this.message, this.messageKind)}
