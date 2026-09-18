@@ -9,7 +9,7 @@ const instance = mount(container, {
     (import.meta.env.DEV
       ? `${location.origin}/api`
       : 'https://hitalk-next-api.ihoey.com'),
-  path: '/playground',
+  path: '/',
   title: 'Hitalk 开发示例',
   placeholder: '说点什么吧...',
   avatar: 'mm',
