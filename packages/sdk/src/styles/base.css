@@ -33,7 +33,6 @@
   opacity: 1;
 }
 
-.Hitalk .vinput:focus-visible,
 .Hitalk .vbtn:focus-visible {
   outline: 2px solid var(--ht-accent);
   outline-offset: 3px;

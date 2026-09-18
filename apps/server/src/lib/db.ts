@@ -27,7 +27,8 @@ export function publicComment(row: CommentRow): Comment {
     parent_id: row.parent_id,
     nick: row.nick,
     website,
-    avatar_hash: avatarHash(row.email || row.nick),
+    // Gravatar normalizes emails; nickname-based fallback identities keep their case.
+    avatar_hash: avatarHash(row.email?.trim().toLowerCase() || row.nick),
     // Markdown is the only persisted content; rendering always uses current safety rules.
     content_html: renderMarkdown(row.content_md),
     like_count: row.like_count,

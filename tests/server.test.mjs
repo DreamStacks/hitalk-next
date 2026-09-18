@@ -113,6 +113,28 @@ test('public responses use an allowlist, including replies and newly created com
   )
 })
 
+test('avatar hashes normalize emails but preserve case in nickname fallbacks', async t => {
+  const f = fixture(t)
+  const guest = await f.create({ nick: 'Guest' })
+  const lowercaseGuest = await f.create({ nick: 'guest' })
+  const email = await f.create({
+    nick: 'Guest',
+    email: ' Person@Example.Invalid ',
+  })
+  // Historical anonymous comments use MD5("Guest"), not MD5("guest").
+  assert.equal(guest.avatar_hash, 'adb831a7fdd83dd1e2a309ce7591dff8')
+  assert.equal(lowercaseGuest.avatar_hash, '084e0343a0486ff05530df6c705c8bb4')
+  assert.equal(
+    email.avatar_hash,
+    createHash('md5').update('person@example.invalid').digest('hex')
+  )
+  const list = await (await f.request('/comments?path=/article')).json()
+  assert.equal(
+    list.comments.find(comment => comment.id === guest.id).avatar_hash,
+    guest.avatar_hash
+  )
+})
+
 test('invalid inputs return 400, oversized bodies 413, without writing pages', async t => {
   const f = fixture(t)
   const base = { path: '/article', nick: 'Reader', content: 'hello' }

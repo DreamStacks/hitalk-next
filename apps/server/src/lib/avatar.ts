@@ -185,10 +185,10 @@ function add32(a: number, b: number) {
 }
 
 /**
- * MD5 哈希函数
+ * 对已选定的头像标识计算 UTF-8 MD5；邮箱规范化由调用方处理。
  */
 export function avatarHash(s: string): string {
-  const bytes = new TextEncoder().encode(s.trim().toLowerCase())
+  const bytes = new TextEncoder().encode(s)
   return hex(
     md51(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
   )

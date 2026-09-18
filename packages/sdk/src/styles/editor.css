@@ -41,10 +41,6 @@
   color: var(--ht-header);
 }
 
-.Hitalk .vheader .vinput:focus {
-  border-bottom-color: var(--ht-danger);
-}
-
 /* 编辑器 */
 .Hitalk .veditor {
   width: 100%;
@@ -52,6 +48,24 @@
   border-bottom: 1px dashed var(--ht-border-dashed);
   background: url(https://cdn.ihoey.com/plbj.png) right bottom no-repeat;
   color: var(--ht-text);
+}
+
+/* 文本框的鼠标与键盘聚焦共用底线提示，避免大面积外框。 */
+.Hitalk .vheader .vinput:focus,
+.Hitalk .veditor:focus {
+  outline: none;
+  border-bottom-color: var(--ht-accent);
+  border-bottom-style: solid;
+  box-shadow: 0 1px 0 var(--ht-accent);
+}
+
+/* 高对比模式可能隐藏阴影，使用系统焦点颜色。 */
+@media (forced-colors: active) {
+  .Hitalk .vheader .vinput:focus,
+  .Hitalk .veditor:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 /* 输入时隐藏插画，避免遮挡文字和光标。 */
