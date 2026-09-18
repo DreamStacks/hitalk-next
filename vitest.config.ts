@@ -1,7 +1,7 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig, type ViteUserConfig } from 'vitest/config'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 
-export default defineConfig(async () => ({
+export default defineConfig(async (): Promise<ViteUserConfig> => ({
   test: {
     restoreMocks: true,
     coverage: {

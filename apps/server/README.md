@@ -14,7 +14,7 @@ Hono + Cloudflare Workers + D1。数据库绑定统一为 `DB`。`wrangler.jsonc
 | `EMAIL_NAME`     | 邮件标题中的站点名，默认 Hitalk                                     |
 | `SITE_URL`       | 博客 HTTP/HTTPS 地址，用于通知链接                                  |
 
-本地从 `.dev.vars.example` 复制 `.dev.vars`；后者已忽略提交。生产密钥用 `wrangler secret put NAME --env production` 配置。邮件需同时配置有效 `RESEND_API_KEY / EMAIL_FROM / SITE_URL`，不再硬编码个人发件域名。密钥不要放入 URL。
+本地从 `.dev.vars.example` 复制 `.dev.vars`；所有 `.dev.vars*` 和 `.env*` 私有配置由根 `.gitignore` 统一排除，仅保留 `.dev.vars.example` / `.env.example` 模板。生产密钥用 `wrangler secret put NAME --env production` 配置。邮件需同时配置有效 `RESEND_API_KEY / EMAIL_FROM / SITE_URL`，不再硬编码个人发件域名。密钥不要放入 URL。
 
 ## 命令
 

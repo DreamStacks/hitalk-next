@@ -1,14 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
-    "types": ["vite/client", "node"],
-    "strict": true,
-    "skipLibCheck": true,
+    "types": ["vite/client"],
     "noEmit": true
   },
-  "include": ["examples/playground/**/*.ts", "vite.config.ts"]
+  "include": ["examples/playground/**/*.ts"]
 }

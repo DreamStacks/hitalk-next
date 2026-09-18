@@ -44,7 +44,7 @@ Vite 直接运行 examples/playground 中的 SDK 源码示例，CSS 原生热更
 
 采用独立的 [lit-html](https://lit.dev/docs/libraries/standalone-templates/)，无需 LitElement 或 Web Components。评论使用 [repeat](https://lit.dev/docs/templates/lists/#the-repeat-directive) 按 ID 保留 DOM 身份，编辑器独立持有草稿。用户文本使用模板绑定，只有可信 API 输出的已净化 Markdown 使用 unsafeHTML。
 
-lit-html 和指令均内联进 ESM/IIFE，不要求 Vue、React 或 Hexo 消费方加载额外渲染运行时。当前 IIFE gzip 约 12.7 kB，相比迁移前约 7.7 kB 增加 5 kB；CSS gzip 约 2.3 kB。体积增加换取模板与事件维护、局部更新和节点复用，暂不引入状态管理库。
+lit-html 和指令均内联进 ESM/IIFE，不要求 Vue、React 或 Hexo 消费方加载额外渲染运行时。迁移 lit-html 时 IIFE gzip 约 12.7 kB，相比迁移前约 7.7 kB 增加 5 kB；当时 CSS gzip 约 2.3 kB；当前体积以构建输出为准。体积增加换取模板与事件维护、局部更新和节点复用，暂不引入状态管理库。
 
 所有自动化测试由 Vitest 运行：SDK 源码使用 jsdom 环境；管理页、发布产物和备份校验独立分组；后端使用 workerd/D1。原 scripts/check-worker.mjs 已迁为 tests/worker.integration.test.mjs，独立配置通过 pnpm test:worker 执行，进程与临时数据库由生命周期钩子清理。scripts/verify-backup.mjs 是运维 CLI，继续保留，其核心校验由测试直接调用。
 

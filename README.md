@@ -18,9 +18,9 @@ pnpm dev
 - 开发示例：[http://127.0.0.1:5173](http://127.0.0.1:5173)，入口为 `examples/playground/index.html`。
 - Worker API：[http://127.0.0.1:8787](http://127.0.0.1:8787)。管理页为 `/admin`，令牌从本地 `.dev.vars` 的 `ADMIN_TOKEN` 读取。
 
-前端直接加载 SDK 源码，无需先构建：CSS 保存后即时更新；TS 保存后自动销毁并重新挂载评论组件，保留未提交的昵称、邮箱、网址和正文。重新挂载会重置回复目标和分页；HTML 修改触发整页刷新。后端由 Wrangler 自动重载，请求经前端 `/api` 代理到本地 Worker；后端修改后重新触发请求即可看到结果。
+前端直接加载 SDK 源码，无需先构建：CSS 保存后即时更新；TS 保存后自动销毁并重新挂载评论组件，保留未提交的昵称、邮箱、网址和正文。重新挂载会重置回复目标和分页；HTML 修改触发整页刷新。后端由 Wrangler 自动重载。Vite 保留 `/api` 到本地 Worker 的代理，但当前示例的 `server` 固定为线上 API，`path` 为 `/`；页面提交和点赞会作用于线上数据。本地后端修改不会反映到该页面，只有将 `server` 切到 `/api` 后才使用本地 Worker。
 
-按 Ctrl+C 一起停止服务；任一服务退出会结束另一服务。前端端口固定为 5173，避免端口被占用时悄悄切换。开发数据保留在本地 D1，下次启动不会清空。
+按 Ctrl+C 一起停止服务；任一服务退出会结束另一服务。前端端口固定为 5173，避免端口被占用时悄悄切换。本地 Worker 的数据保留在本地 D1，下次启动不会清空；与当前示例页面读取的生产数据分开。
 
 也可分开运行 `pnpm dev:server`、`pnpm dev:web`；首次单独启动前执行 `pnpm dev:setup`。SDK 发布产物仍使用 `pnpm build`，若需持续构建产物则执行 `pnpm --filter @hitalk/sdk dev`。自动化测试监听使用 `pnpm test:watch`。
 
@@ -30,7 +30,7 @@ pnpm dev
 pnpm db:seed
 ```
 
-向本地 `/playground` 导入 12 条根评论、4 条回复和 10 条点赞，包含置顶、Markdown、表情、长文与分页场景。数据均为虚构；重复执行不会重复插入或覆盖已有评论。该命令只操作本地 D1，不会发送邮件。刷新示例页即可看到结果；数据源为 `examples/playground/seed.sql`。
+向本地 `/playground` 导入 12 条根评论、4 条回复和 10 条点赞，包含置顶、Markdown、表情、长文与分页场景。数据均为虚构；重复执行不会重复插入或覆盖已有评论。该命令只操作本地 D1，不会发送邮件。数据源为 `examples/playground/seed.sql`。当前示例连接线上 API 且读取 `/`，刷新不会显示这份本地数据；查看 seed 需将示例 `server` 切到 `/api`，并将 `path` 设为 `/playground`。两种模式的配置统一尚待处理。
 
 ## 嵌入 SDK
 
@@ -138,7 +138,7 @@ pnpm --filter @hitalk/server build # Worker 打包检查，不部署
 pnpm test:worker                   # 隔离的真实 Worker/D1 集成与备份恢复演练
 ```
 
-CI 执行上述三项。`test:worker` 创建临时配置和本地数据库，使用测试令牌，不访问现有数据库、不发送邮件，结束后清理临时文件。
+CI 执行上述三项，并构建示例前端。`test:worker` 创建临时配置和本地数据库，使用测试令牌，不访问现有数据库、不发送邮件，结束后清理临时文件。
 
 Vitest 统一运行测试：后端在 workerd + 本地 D1 中执行，前端在 jsdom 中验证源码交互与 IIFE 产物，备份在 Node SQLite 中独立恢复。测试覆盖鉴权、字段泄漏、输入校验、计数、回复归属、XSS、SDK 状态/销毁及发布包类型。`test:worker` 使用独立的 Vitest 集成测试配置，验证完整 Wrangler 启动、迁移和备份导出链路，并在测试结束或失败时清理进程与临时目录。
 
@@ -153,11 +153,11 @@ pnpm build:web    # 输出 dist/web
 pnpm preview:web # 本地预览生产构建 http://127.0.0.1:4173
 ```
 
-开发模式默认通过 `/api` 访问本地 Worker；生产构建默认直连 `https://hitalk-next-api.ihoey.com`。构建时可用 `VITE_API_URL` 覆盖公开的 API 地址，不要将管理令牌或其他密钥放入 `VITE_` 环境变量。资源使用相对路径，同时适用于 GitHub 项目子路径与独立域名；评论页面标识保持 `/playground`。
+当前开发页面和生产构建均连接 `https://hitalk-next-api.ihoey.com`，评论页面标识为 `/`。`examples/playground/main.ts` 中读取 `VITE_API_URL` 的逻辑目前被注释，因此 Pages 工作流中的同名变量暂不生效。资源使用相对路径，同时适用于 GitHub 项目子路径与独立域名。
 
 仓库包含手动触发的 `Deploy frontend to GitHub Pages` 工作流，检查通过后仅上传 `dist/web`。Pages 使用 GitHub Actions 发布源，从 Actions 选择 `main` 运行该工作流。前端发布地址为 [留言小院](https://hitalk-next.ihoey.com/)。本仓库已公开，使用 GitHub Free 的 Pages；完整步骤见 [运维说明](docs/operations.md#github-pages-前端)。
 
-首次部署和备份恢复请阅读 [运维说明](docs/operations.md)。不提供旧 API、旧 SDK 或历史数据兼容。
+首次部署和备份恢复请阅读 [运维说明](docs/operations.md)。旧系统评论已完成一次性导入，不提供旧 API/SDK 兼容层或通用迁移工具。
 
 配置说明见 [后端 README](apps/server/README.md)。本地迁移默认使用 `--local`，生产变更使用明确带 `:remote` 的命令。
 
@@ -175,4 +175,4 @@ tests/                    Vitest：SDK、发布产物、后端、备份和真实
 scripts/                  本地开发初始化与备份恢复校验 CLI
 ```
 
-技术栈版本与取舍见 [依赖决策](docs/dependencies.md)，架构与剩余限制见 [维护说明](docs/architecture.md)。邮件为尽力发送，尚无持久队列、自动重试或投递状态；匿名提交尚无限流、验证码与审核，开放到公网前应配置入口防滥用。分页限制根评论数，不限制单个讨论串的回复数量。Markdown 是唯一持久化的评论内容。
+当前进展与下一步见 [路线图](docs/roadmap.md)。技术栈版本与取舍见 [依赖决策](docs/dependencies.md)，架构与剩余限制见 [维护说明](docs/architecture.md)。邮件为尽力发送，尚无持久队列、自动重试或投递状态；匿名提交尚无限流、验证码与审核，试运行期间应优先补齐入口防滥用。分页限制根评论数，不限制单个讨论串的回复数量。Markdown 是唯一持久化的评论内容。

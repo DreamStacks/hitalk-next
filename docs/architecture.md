@@ -27,7 +27,7 @@ SDK 根据完整讨论串中的 `parent_id` 显示实际被回复者，点击在
 
 0002_comment_ua.sql 给评论添加可空的 ua 字段，保留既有评论。新评论采集 User-Agent 请求头，不接受正文里的 ua 作为来源。后端使用 Bowser 解析，公开 client.browser 展示浏览器名称和主版本，client.os 展示操作系统名称和 UA 可识别的版本；SDK 使用文本绑定显示。未知或缺失 UA 不显示占位信息。
 
-历史迁移可将旧 Comment.ua 原值导入新 ua 字段，再走同一个输出解析流程。不要从旧 UA 推断当前设备，也不要将 UA 当作身份验证。浏览器缩减 UA 时，系统版本可能不是真实版本（例如 Windows 11 的传统 UA 仍可能显示 Windows 10）。
+本次历史迁移已将旧 Comment.ua 原值导入新 ua 字段，再走同一个输出解析流程。不要从旧 UA 推断当前设备，也不要将 UA 当作身份验证。浏览器缩减 UA 时，系统版本可能不是真实版本（例如 Windows 11 的传统 UA 仍可能显示 Windows 10）。
 
 ## SDK 生命周期
 
@@ -44,6 +44,12 @@ Store 只在评论列表数据变动时通知列表渲染。昵称缓存和回�
 `destroy()` 清理请求、订阅、全局事件监听与 DOM。同一容器再次 `mount()` 会先销毁旧实例。用户字段通过 Lit 文本/属性绑定，网址单独校验协议。只有服务端生成的 `content_html` 通过 unsafeHTML 插入，因此 SDK 应连接可信的 Hitalk API。
 
 渲染器随 SDK 打包。构建使用 neutral 平台和 Lit 的 node 条件入口，使 ESM 可在无 DOM 的服务端环境导入；该入口也支持有 DOM 的浏览器。实际 mount 仍必须在客户端执行，不提供 SSR 或 hydration。
+
+## TypeScript 配置
+
+根 `tsconfig.json` 统一 target、module、moduleResolution、strict、skipLibCheck 和共享包路径映射，只作为公共配置入口。Server、SDK 和 shared 继承它，并保留各自的运行环境类型；Server 不再配置未使用的 React JSX。
+
+`tsconfig.dev.json` 检查浏览器示例；`tsconfig.tools.json` 使用 Node 类型检查 Vite、两份 Vitest 和 SDK 的 tsdown 配置。根 `pnpm typecheck` 执行 Server、SDK、示例和工具配置检查，共享源码也通过包导入进入检查。`tsconfig.sdk-build.json` 专用于跨 SDK/shared 的发布声明生成。
 
 ## 验证
 
@@ -63,6 +69,6 @@ CI 还进行 Worker dry-run 打包。源码构建检查不等于生产部署验�
 - Gravatar 摘要不等于匿名身份，邮件仍以明文存于私有数据库。对头像和表情 CDN 的请求会交给第三方。
 - 同一 IP 的访客共享点赞限制；本地未提供 Cloudflare IP 时使用共同标识，不采用访客可伪造的 X-Forwarded-For。
 - 管理令牌是静态共享密钥，不是多用户权限系统。管理页只在内存保存令牌，刷新需重新登录。
-- 国际化、登录和更多插件暂缓。不承担旧版本兼容或数据迁移。
+- 国际化、登录和更多插件暂缓。旧评论已完成一次性迁移，不维护旧 API/SDK 兼容层或通用迁移工具。
 
-下一阶段应在自己的博客做小范围试运行，观察真实错误和数据量，再决定是否需要更复杂的架构。
+当前前端和 API 已部署并导入旧评论。接下来继续进行博客集成验收与试运行，观察真实错误和数据量；进展见 [路线图](roadmap.md)。

@@ -17,7 +17,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "prepare": "husky",
-    "typecheck": "pnpm --filter @hitalk/server typecheck && pnpm --filter @hitalk/sdk typecheck && tsc -p tsconfig.dev.json",
+    "typecheck": "pnpm --filter @hitalk/server typecheck && pnpm --filter @hitalk/sdk typecheck && tsc -p tsconfig.dev.json && tsc -p tsconfig.tools.json",
     "build": "pnpm --filter @hitalk/sdk build",
     "build:web": "vite build",
     "preview:web": "vite preview --host 127.0.0.1 --port 4173 --strictPort",

@@ -1,6 +1,6 @@
-# 首次部署与备份恢复
+# 部署与备份恢复
 
-当前结构按新系统设计，不提供旧代码或历史数据兼容。生产命令需要在确认目标数据库后执行；自动化集成测试只使用隔离的本地数据库。
+当前前端、API 和独立 D1 已部署；旧系统评论已完成一次性导入，不维护旧 API/SDK 兼容层。生产命令需要在确认目标数据库后执行；自动化集成测试只使用隔离的本地数据库。
 
 ## GitHub Pages 前端
 
@@ -13,11 +13,11 @@
 
 域名在仓库 Settings → Pages → Custom domain 中绑定为 `hitalk-next.ihoey.com`。Cloudflare DNS 使用 `CNAME hitalk-next → dreamstacks.github.io`，代理状态为「仅 DNS」，TTL 自动；GitHub 签发证书后启用 Enforce HTTPS。此仓库使用自定义 Actions 工作流，域名由 Pages 设置维护，无需向构建产物添加 `CNAME` 文件，参见 [GitHub 自定义域名文档](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。
 
-本地先运行 `pnpm build:web` 和 `pnpm preview:web` 预览生产构建。默认 API 是 `https://hitalk-next-api.ihoey.com`，可在构建时设置 `VITE_API_URL`；Pages 工作流也显式设置了这一公开地址。`VITE_` 变量会写入浏览器产物，只允许公开配置。
+本地先运行 `pnpm build:web` 和 `pnpm preview:web` 预览生产构建。当前 API 固定为 `https://hitalk-next-api.ihoey.com`，页面标识为 `/`。`main.ts` 暂时注释了 `VITE_API_URL` 读取逻辑，Pages 工作流设置的同名变量因此不生效；修改 API 地址目前需改示例配置。恢复环境变量切换列在路线图中。
 
-API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `routes`，避免覆盖已有绑定。Worker 的根路径健康检查成功并不代表数据库已可用；还需确认 `/comments?path=/playground` 与 `/comments/count?paths[]=/playground` 返回 200，再验证前端读取和跨域请求。不要通过重置现有数据库来排查部署问题。
+API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `routes`，避免覆盖已有绑定。Worker 的根路径健康检查成功并不代表数据库已可用；还需确认 `/comments?path=/` 与 `/comments/count?paths[]=/` 返回 200，再验证前端读取和跨域请求。不要通过重置现有数据库来排查部署问题。
 
-## 首次部署
+## 首次部署到新的环境
 
 1. 在 `apps/server` 下创建生产 D1 数据库，将 ID 填入 `wrangler.jsonc` 的 `env.production.d1_databases`，绑定名必须为 `DB`。本项目生产库为 `hitalk-next`；默认配置用于本地开发，保留原有本地数据标识。其他部署者须替换生产数据库 ID。
 2. 设置两个不同的随机密钥：
@@ -40,11 +40,17 @@ API 自定义域名由 Cloudflare 控制台管理，当前 Wrangler 不声明 `r
 6. 托管本次构建的 SDK JS/CSS，在博客验证提交、回复、点赞、分页、管理删除与移动端。
 7. 公网试运行前配置入口防滥用策略。需要邮件时设置 `RESEND_API_KEY / EMAIL_FROM / SITE_URL / ADMIN_EMAIL`，验证邮件域名及投递。
 
-本地命令默认不连接生产库。Worker 打包检查使用 `deploy --dry-run`，不会发布。`test:worker` 使用临时数据库、测试令牌和空的邮件配置。
+本地 Worker、迁移和 seed 命令默认只操作本地库；当前示例页面固定连接生产 API，页面写操作会作用于线上数据。Worker 打包检查使用 `deploy --dry-run`，不会发布。`test:worker` 使用临时数据库、测试令牌和空的邮件配置。
 
 2026-09-17 部署时，原远程 `hitalk` 库的三张业务表均为空，但仍采用旧结构；该库已备份并保留。新版创建独立的 `hitalk-next` 库，执行 `0001` / `0002` 迁移，不对旧库重建或删除。生产 Worker 仍名为 `hitalk-server`，使用 `production` 环境配置，域名保持 `hitalk-next-api.ihoey.com`。
 
 首次远程迁移发现 D1 对触发器内 `CASE … END` 的解析与本地执行不同，初始迁移在成功应用前已改为等价的 `SELECT RAISE(...) WHERE ...`。远程迁移及本地约束测试均已通过；此后冻结这两份已执行的迁移，后续结构变更必须新增迁移文件。
+
+## 已完成的历史导入
+
+2026-09-17 已将旧 LeanCloud 导出的 717 条评论、28 个页面及评论 UA 导入生产 D1，保留 251 条有效回复关系。旧用户记录仅私下归档，未导入登录账号。原始导出、SQL 备份、一次性导入脚本和核验记录保存在仓库外的私有迁移目录，不应提交到公开仓库。
+
+2026-09-18 修复了无邮箱评论的头像计算：邮箱去首尾空格并转小写，昵称保持原样。hash 在 API 输出时生成，不需要重新导入数据库。以上为已完成的操作记录，不是可重复执行的导入步骤。
 
 ## 数据规则与以后修改结构
 
