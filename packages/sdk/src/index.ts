@@ -280,7 +280,14 @@ export class Hitalk {
       if (this.firstLoad) {
         this.firstLoad = false
         const target = location.hash.slice(1)
-        if (/^[0-9a-f-]{36}$/i.test(target)) void this.locate(target)
+        // Public IDs are opaque; imported comments need not use UUIDs.
+        // Leave the host's headings and #comments anchor to the browser.
+        const anchor = this.container.ownerDocument.getElementById(target)
+        if (
+          /^[A-Za-z0-9_-]{1,128}$/.test(target) &&
+          (!anchor || (anchor.closest('.Hitalk') && anchor !== this.container))
+        )
+          void this.locate(target)
       }
     } catch (error) {
       if (!this.destroyed && sequence === this.sequence) {

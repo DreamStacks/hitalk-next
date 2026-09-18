@@ -362,6 +362,30 @@ test('reply pagination is independent and keeps existing replies', async t => {
   assert.equal(document.querySelectorAll('.vcard').length, 3)
   assert.equal(document.querySelector('.vmore-replies'), null)
 })
+test('opaque comment anchors load and focus comments outside the first page', async t => {
+  const previousURL = location.href
+  const id = '5ad9f7779f54540038c33b11'
+  history.replaceState(null, '', `#${id}`)
+  t.onTestFinished(() => history.replaceState(null, '', previousURL))
+  const f = fixture(t, url =>
+    url.endsWith(`/${id}/context`)
+      ? json({ root: comment({ id, replies: [] }), target_id: id })
+      : json(list([]))
+  )
+  await tick()
+  await tick()
+  assert.equal(f.requests.filter(r => r.url.endsWith('/context')).length, 1)
+  assert.equal(document.activeElement.id, id)
+  assert.equal(HTMLElement.prototype.scrollIntoView.mock.calls.length, 1)
+})
+test('host comment anchors do not trigger comment context requests', async t => {
+  const previousURL = location.href
+  history.replaceState(null, '', '#comments')
+  t.onTestFinished(() => history.replaceState(null, '', previousURL))
+  const f = fixture(t, () => json(list([])))
+  await tick()
+  assert.equal(f.requests.filter(r => r.url.endsWith('/context')).length, 0)
+})
 test('unloaded reply target is fetched by context without clearing draft', async t => {
   const child = comment({
     id: 'child',
