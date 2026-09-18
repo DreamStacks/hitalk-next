@@ -29,8 +29,8 @@
       "vars": {
         "RATE_LIMIT_ENABLED": "true",
         "MODERATION_MODE": "post",
-        "EMAIL_ENABLED": "false",
-        "SITE_URL": "https://hitalk-next.ihoey.com",
+        "EMAIL_ENABLED": "true",
+        "SITE_URL": "https://blog.ihoey.com",
         "NOTIFICATION_API_URL": "https://hitalk-next-api.ihoey.com",
       },
       "ratelimits": [

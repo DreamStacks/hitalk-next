@@ -36,7 +36,11 @@ pnpm dev
 
 匿名频控按 Cloudflare 位置执行、最终一致，属于防滥用保护。IP 只以带盐摘要参与频控，不存入评论表；token 本身不能证明真人。限流依赖缺失时写入返回 503，不静默失效。
 
-当前生产配置 EMAIL_ENABLED=false；配置 Resend 发件凭据和已验证发件人，并用受控收件人验证真实投递后再启用。启用邮件但投递配置暂缺时保留待处理任务；从管理接口查看 pending/sending/sent/failed/cancelled。sent 仅代表服务商接受。未验证访客邮箱不能当作身份凭据。退订入口为邮件中的随机能力链接，GET 只展示确认表单，POST 写入抑制列表。
+当前生产配置 EMAIL_ENABLED=true；Resend 密钥、发件人、通知邮箱和站点名称通过 Worker secrets 配置，与本地私有邮件配置一致。SITE_URL 指向博客 https://blog.ihoey.com，NOTIFICATION_API_URL 指向生产 Worker。新部署须先配置自己的邮件凭据再启用。本地 .dev.vars 已包含邮件配置，EMAIL_ENABLED 默认保持 false，避免开发操作发送真实通知。
+
+Cloudflare secrets 无法读回原值。当前 ADMIN_TOKEN 与本地 apps/server/.env、apps/server/.dev.vars 一致；从私有文件复制其值登录管理页。若遗失全部副本，使用 `pnpm --filter @hitalk/server exec wrangler secret put ADMIN_TOKEN --env production` 交互式重设，并同步更新本地私有文件；旧 token 随即失效。不要将 token 提交到 Git 或放入 URL。
+
+启用邮件但投递配置暂缺时保留待处理任务；从管理接口查看 pending/sending/sent/failed/cancelled。sent 仅代表服务商接受。未验证访客邮箱不能当作身份凭据。退订入口为邮件中的随机能力链接，GET 只展示确认表单，POST 写入抑制列表。
 
 ## 静态前端
 
