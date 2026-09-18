@@ -1,5 +1,4 @@
 import { mount } from '../../packages/sdk/src/index'
-import './playground.css'
 import './theme'
 
 const container = document.querySelector<HTMLElement>('#comment')!
