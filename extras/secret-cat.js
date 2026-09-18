@@ -5,6 +5,10 @@
     root.dataset.ready = 'true'
     const button = root.querySelector('button')
     if (!button) return
+    button.innerHTML = `<svg class="hitalk-secret-star" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path class="hitalk-secret-star-body" d="m12 3 2.8 5.7 6.3.9-4.55 4.45 1.07 6.28L12 17.36l-5.62 2.97 1.07-6.28L2.9 9.6l6.3-.9L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+    </svg>`
+    root.dataset.taps = '0'
     root.insertAdjacentHTML(
       'beforeend',
       `<span class="hitalk-secret-visitor" aria-hidden="true">
@@ -27,7 +31,7 @@
       clearTimeout(hideTimer)
       taps = 0
       root.dataset.open = 'false'
-      button.textContent = '☆'
+      root.dataset.taps = '0'
       message.textContent = ''
     }
     button.addEventListener('click', () => {
@@ -37,7 +41,7 @@
         return
       }
       taps++
-      button.textContent = taps === 1 ? '✧' : '✦'
+      root.dataset.taps = String(taps)
       if (taps < 3) {
         resetTimer = setTimeout(close, 1800)
         return
