@@ -408,6 +408,7 @@ export class Hitalk {
           : '已提交，审核通过后展示',
         created.status === 'published' ? 'success' : 'warning'
       )
+      this.editor.celebrate()
       if (created.status === 'published') {
         try {
           if (created.root_id) {
@@ -464,6 +465,7 @@ export class Hitalk {
       if (!this.destroyed) {
         this.mutation++
         this.store.patch(id, result)
+        if (result.liked) this.commentList.celebrateLike(id)
       }
     } catch (error) {
       if (!this.destroyed) this.notice(this.error(error), 'error')

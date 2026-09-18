@@ -2,6 +2,7 @@ import { html, nothing, render } from 'lit-html'
 import type { GuestField, UserInfo } from '@hitalk/shared'
 import { isValidEmail, isValidWebsite } from '@hitalk/shared'
 import { renderEmojiPicker } from '../renderer/emoji'
+import { sendMotion } from './motion'
 export interface EditorData extends UserInfo {
   content: string
   notify: boolean
@@ -180,6 +181,20 @@ export class Editor {
               if (!this.submitting) this.onSubmit(this.snapshot())
             }}
           >
+            <svg
+              class="hitalk-send-plane"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m21 3-7 18-4-7-7-4 18-7Zm0 0L10 14" />
+            </svg>
             ${this.submitting ? '发送中…' : '发送'}
           </button>
         </div>
@@ -202,6 +217,9 @@ export class Editor {
   }
   clear() {
     this.container.querySelector<HTMLTextAreaElement>('.veditor')!.value = ''
+  }
+  celebrate() {
+    sendMotion(this.container)
   }
   destroy() {
     this.events.abort()

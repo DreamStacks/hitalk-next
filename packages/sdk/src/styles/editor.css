@@ -138,11 +138,17 @@
 }
 
 .Hitalk .vsubmit {
+  gap: 8px;
   min-width: 88px;
   margin-left: auto;
   border-color: var(--ht-accent);
   background: var(--ht-accent);
   color: var(--ht-accent-text);
+}
+
+.Hitalk .hitalk-send-plane {
+  flex: none;
+  overflow: visible;
 }
 
 .Hitalk .hitalk-reply-slot:not(:empty) {

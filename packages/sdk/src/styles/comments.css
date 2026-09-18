@@ -179,6 +179,24 @@
   color: var(--ht-danger);
 }
 
+.Hitalk .vlike {
+  position: relative;
+}
+
+.Hitalk .vlike-symbol {
+  display: inline-block;
+}
+
+.Hitalk .hitalk-like-spark {
+  position: absolute;
+  left: 9px;
+  top: 4px;
+  color: var(--ht-danger);
+  font-size: 10px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .Hitalk .vquote:not(:empty) {
   margin-top: 12px;
   padding-left: 16px;

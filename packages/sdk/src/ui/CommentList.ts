@@ -1,6 +1,7 @@
 import { nothing, render } from 'lit-html'
 import type { Comment } from '@hitalk/shared'
 import { renderCommentList, type CommentActions } from '../renderer/comment'
+import { likeMotion } from './motion'
 
 export class CommentList {
   private measured = new WeakMap<HTMLElement, string>()
@@ -48,6 +49,15 @@ export class CommentList {
       ?.classList.remove('expand')
     target.focus({ preventScroll: true })
     target.scrollIntoView({ block: 'center', behavior: 'instant' })
+  }
+
+  celebrateLike(id: string) {
+    const card = Array.from(this.container.querySelectorAll('.vcard')).find(
+      element => element.id === id
+    )
+    likeMotion(
+      card?.querySelector(':scope > section > .vmeta > .vlike') || null
+    )
   }
 
   destroy() {

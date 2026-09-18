@@ -785,3 +785,121 @@ test('deleting the last visible content removes the empty root and clears reply 
   await tick()
   assert.equal(document.querySelector('.vcard'), null)
 })
+
+function recordMotion(t, reduced = false) {
+  const previous = Object.getOwnPropertyDescriptor(Element.prototype, 'animate')
+  const calls = []
+  Object.defineProperty(Element.prototype, 'animate', {
+    configurable: true,
+    value() {
+      calls.push([...this.classList].join(' '))
+      return { cancel() {} }
+    },
+  })
+  vi.stubGlobal('matchMedia', () => ({ matches: reduced }))
+  t.onTestFinished(() => {
+    if (previous) Object.defineProperty(Element.prototype, 'animate', previous)
+    else delete Element.prototype.animate
+    vi.unstubAllGlobals()
+  })
+  return calls
+}
+test('like hearts wait for confirmation and do not replay on unlike or failure', async t => {
+  const response = deferred()
+  let writes = 0
+  fixture(t, (_url, init) => {
+    if (init.method === 'PUT' || init.method === 'DELETE') {
+      writes++
+      if (writes === 1) return response.promise
+      if (writes === 2) return json({ liked: false, like_count: 0 })
+      return json({ code: 'RATE_LIMITED', message: '稍后重试' }, 429)
+    }
+    return json(list([comment()]))
+  })
+  const calls = recordMotion(t)
+  await tick()
+  const click = () => document.querySelector('.vlike').click()
+  click()
+  await tick()
+  assert.equal(calls.filter(c => c.includes('hitalk-like-spark')).length, 0)
+  response.resolve(json({ liked: true, like_count: 1 }))
+  await tick()
+  assert.equal(calls.filter(c => c.includes('hitalk-like-spark')).length, 3)
+  click()
+  await tick()
+  click()
+  await tick()
+  assert.equal(calls.filter(c => c.includes('hitalk-like-spark')).length, 3)
+})
+test('send plane waits for a successful response and preserves text during submission', async t => {
+  const response = deferred()
+  const f = fixture(t, (url, init) => {
+    if (init.method === 'POST') return response.promise
+    if (url.includes('/count?')) return json({ '/article': 1 })
+    return json(list([]))
+  })
+  const calls = recordMotion(t)
+  await tick()
+  f.submit('a little note')
+  await tick()
+  assert.equal(document.querySelector('.veditor').value, 'a little note')
+  assert.equal(calls.includes('hitalk-send-plane'), false)
+  response.resolve(json(comment(), 201))
+  await tick()
+  assert.equal(calls.filter(c => c === 'hitalk-send-plane').length, 1)
+  assert.equal(document.querySelector('.veditor').value, '')
+})
+test('reduced motion keeps successful like and send updates without decorative animation', async t => {
+  const f = fixture(t, (url, init) => {
+    if (init.method === 'POST') return json(comment({ id: 'new' }), 201)
+    if (init.method === 'PUT') return json({ liked: true, like_count: 1 })
+    if (url.includes('/count?')) return json({ '/article': 2 })
+    return json(list([comment()]))
+  })
+  const calls = recordMotion(t, true)
+  await tick()
+  document.querySelector('.vlike').click()
+  await tick()
+  assert.equal(
+    document.querySelector('.vlike').getAttribute('aria-pressed'),
+    'true'
+  )
+  f.submit()
+  await tick()
+  assert.equal(calls.length, 0)
+  assert.equal(document.querySelector('.veditor').value, '')
+})
+
+test('footer cat requires three clicks, resets between attempts and dismisses without moving focus', async t => {
+  vi.useFakeTimers()
+  document.body.innerHTML =
+    '<span class="hitalk-secret" data-hitalk-secret><button type="button">☆</button></span>'
+  t.onTestFinished(() => {
+    window.dispatchEvent(new Event('pagehide'))
+    vi.useRealTimers()
+    document.body.replaceChildren()
+  })
+  await import('../extras/secret-cat.js')
+  const root = document.querySelector('[data-hitalk-secret]')
+  const button = root.querySelector('button')
+  button.focus()
+  button.click()
+  button.click()
+  assert.notEqual(root.dataset.open, 'true')
+  vi.advanceTimersByTime(1800)
+  button.click()
+  assert.notEqual(root.dataset.open, 'true')
+  button.click()
+  button.click()
+  assert.equal(root.dataset.open, 'true')
+  assert.match(root.querySelector('[role="status"]').textContent, /喵/)
+  assert.equal(document.activeElement, button)
+  button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+  assert.equal(root.dataset.open, 'false')
+  button.click()
+  button.click()
+  button.click()
+  vi.advanceTimersByTime(3200)
+  assert.equal(root.dataset.open, 'false')
+  assert.equal(root.querySelector('[role="status"]').textContent, '')
+})

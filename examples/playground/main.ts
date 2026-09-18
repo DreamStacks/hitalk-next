@@ -1,5 +1,6 @@
 import { mount } from '../../packages/sdk/src/index'
 import './theme'
+import '../../extras/secret-cat.js'
 
 const container = document.querySelector<HTMLElement>('#comment')!
 const instance = mount(container, {

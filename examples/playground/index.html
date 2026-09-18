@@ -10,6 +10,7 @@
     <meta name="theme-color" content="#f5f8f5" />
     <title>留言小院 · Hitalk</title>
     <link rel="stylesheet" href="/playground.css" />
+    <link rel="stylesheet" href="../../extras/secret-cat.css" />
     <script>
       try {
         if (localStorage.getItem('hitalk-playground-theme') === 'dark')
@@ -151,7 +152,13 @@
     </main>
 
     <footer class="site-footer">
-      <span>Hitalk · 开源评论系统</span>
+      <span
+        >Hitalk · 开源评论系统<span class="hitalk-secret" data-hitalk-secret
+          ><button type="button" aria-label="点亮小星星" title="点亮小星星">
+            ☆
+          </button></span
+        ></span
+      >
       <a
         href="https://github.com/DreamStacks/hitalk-next"
         target="_blank"

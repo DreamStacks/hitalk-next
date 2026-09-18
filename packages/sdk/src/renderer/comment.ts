@@ -40,7 +40,7 @@ function renderComment(
       </div>
       ${c.status !== 'published' && !c.deleted ? html`<div class="hitalk-comment-status">${c.status === 'pending' ? '审核中' : '该评论未公开'}</div>` : nothing}
       <div class="vmeta">
-        ${!c.deleted && c.status === 'published' ? html`<button class="vlike" type="button" aria-pressed=${String(c.liked)} @click=${() => actions.onLike(c.id)}>${c.liked ? '♥' : '♡'} <span class="vlike-count">${c.like_count}</span></button>` : nothing}${c.can_reply ? html`<button class="vat" type="button" @click=${() => actions.onReply(c.id, c.nick)}>回复</button>` : nothing}${c.can_delete ? html`<button class="vdelete" type="button" @click=${() => actions.onDelete(c.id)}>删除</button>` : nothing}
+        ${!c.deleted && c.status === 'published' ? html`<button class="vlike" type="button" aria-pressed=${String(c.liked)} aria-label=${`${c.liked ? '取消点赞' : '点赞'}，${c.like_count} 个赞`} @click=${() => actions.onLike(c.id)}><span class="vlike-symbol" aria-hidden="true">${c.liked ? '♥' : '♡'}</span> <span class="vlike-count">${c.like_count}</span><span class="hitalk-like-spark" aria-hidden="true">♥</span><span class="hitalk-like-spark" aria-hidden="true">♥</span><span class="hitalk-like-spark" aria-hidden="true">♥</span></button>` : nothing}${c.can_reply ? html`<button class="vat" type="button" @click=${() => actions.onReply(c.id, c.nick)}>回复</button>` : nothing}${c.can_delete ? html`<button class="vdelete" type="button" @click=${() => actions.onDelete(c.id)}>删除</button>` : nothing}
       </div>
       <div class="hitalk-reply-slot"></div>
       ${
