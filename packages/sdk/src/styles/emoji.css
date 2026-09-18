@@ -1,0 +1,113 @@
+/* 表情选择器 */
+.Hitalk .smiles {
+  position: relative;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.Hitalk .smiles-logo {
+  cursor: pointer;
+  user-select: none;
+  color: var(--ht-muted);
+  font-size: 1.2rem;
+}
+
+.Hitalk .smiles-logo:hover {
+  color: var(--ht-header);
+}
+
+.Hitalk .smiles-body {
+  display: none;
+  position: absolute;
+  bottom: 30px;
+  left: 0;
+  width: min(380px, calc(100vw - 64px));
+  max-height: 300px;
+  background: var(--ht-smiles-bg);
+  border: 1px solid var(--ht-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+
+.Hitalk .smiles-open .smiles-body {
+  display: block;
+}
+
+.Hitalk .smiles-items {
+  display: none;
+  padding: 10px;
+  height: 250px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+}
+
+.Hitalk .smiles-items-show {
+  display: block;
+}
+
+.Hitalk .smiles-item {
+  display: inline-block;
+  margin: 4px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.Hitalk .smiles-item:hover {
+  transform: scale(1.2);
+}
+
+.Hitalk .smiles-item img {
+  width: 30px;
+  height: 30px;
+}
+
+.Hitalk .smiles-bar {
+  border-top: 1px solid var(--ht-border);
+  padding: 8px 10px;
+  background: var(--ht-smiles-bar);
+  border-radius: 0 0 6px 6px;
+}
+
+.Hitalk .smiles-packages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.Hitalk .smiles-name {
+  padding: 4px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: var(--ht-text);
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    opacity 0.2s;
+}
+
+.Hitalk .smiles-name:hover {
+  background: var(--ht-border);
+}
+
+.Hitalk .smiles-package-active {
+  background: var(--ht-accent);
+  color: #fff;
+}
+
+.Hitalk .smiles-package-active:hover {
+  background: var(--ht-accent);
+  opacity: 0.9;
+}
+
+@media screen and (max-width: 520px) {
+  .Hitalk .smiles-body {
+    max-width: 320px;
+  }
+}

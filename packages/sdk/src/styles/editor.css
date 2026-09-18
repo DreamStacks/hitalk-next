@@ -1,0 +1,76 @@
+/* 评论框容器 */
+.Hitalk .vwrap {
+  border: 1px solid var(--ht-border);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  position: relative;
+  padding: 10px;
+  background: var(--ht-input-bg);
+}
+
+/* 欢迎信息 */
+.Hitalk .welcome {
+  position: relative;
+  padding-bottom: 10px;
+  font-size: 0.875rem;
+  color: var(--ht-muted);
+  border-bottom: 1px var(--ht-border-dashed) dashed;
+  user-select: none;
+}
+
+.Hitalk .welcome span {
+  color: var(--ht-accent);
+  cursor: pointer;
+}
+
+/* 用户信息输入区 */
+.Hitalk .vheader {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.Hitalk .vheader.hide {
+  display: none;
+}
+
+.Hitalk .vheader .vinput {
+  flex: 1;
+  min-width: 200px;
+  border-bottom: 1px var(--ht-border-dashed) dashed;
+  color: var(--ht-header);
+}
+
+.Hitalk .vheader .vinput:focus {
+  border-bottom-color: var(--ht-danger);
+}
+
+/* 编辑器 */
+.Hitalk .veditor {
+  width: 100%;
+  min-height: 140px;
+  border-bottom: 1px dashed var(--ht-border-dashed);
+  background: url(https://cdn.ihoey.com/plbj.png) right bottom no-repeat;
+  color: var(--ht-text);
+}
+
+/* 输入时隐藏插画，避免遮挡文字和光标。 */
+.Hitalk .veditor:focus,
+.Hitalk .veditor:not(:placeholder-shown) {
+  background-image: none;
+}
+
+/* 控制栏 */
+.Hitalk .vcontrol {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  font-size: 0.725rem;
+}
+
+@media screen and (max-width: 520px) {
+  .Hitalk .vheader .vinput {
+    min-width: 100%;
+  }
+}

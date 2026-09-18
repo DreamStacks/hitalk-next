@@ -356,16 +356,27 @@ test('errors are visible as text and failed submission retains the draft', async
 
 test('loading more appends roots and requests the configured page size', async t => {
   const requests = []
+  const nextPage = deferred()
   const f = fixture(t, async url => {
     requests.push(url)
     const page = Number(new URL(url).searchParams.get('page'))
+    if (page === 2) return nextPage.promise
     return json(list([comment({ id: `root-${page}` })], page, page === 1))
   })
   await tick()
-  f.document.querySelector('.hitalk-more').click()
+  const more = f.document.querySelector('.hitalk-more')
+  more.click()
+  assert.equal(more.disabled, true)
+  assert.equal(more.getAttribute('aria-busy'), 'true')
+  assert.equal(more.textContent.trim(), '正在加载…')
+  more.click()
+  assert.equal(requests.length, 2)
+  nextPage.resolve(json(list([comment({ id: 'root-2' })], 2, false)))
   await tick()
   assert.equal(f.document.querySelectorAll('.vcard').length, 2)
-  assert.equal(f.document.querySelector('.hitalk-more').hidden, true)
+  assert.equal(more.hidden, true)
+  assert.equal(more.disabled, false)
+  assert.equal(more.getAttribute('aria-busy'), 'false')
   assert.ok(requests[1].includes('page=2&pageSize=10'))
 })
 

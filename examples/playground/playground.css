@@ -8,8 +8,10 @@
   --page-tint: #e8f0e9;
   --page-border: #dfe7e1;
   --page-input: #f8faf8;
+  --page-rose: #a14f68;
+  --page-rose-tint: #fbedf1;
   --page-font:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', sans-serif;
 }
 
@@ -23,6 +25,8 @@
   --page-tint: #2c4034;
   --page-border: #3b4f42;
   --page-input: #23332a;
+  --page-rose: #efadc2;
+  --page-rose-tint: #413039;
 }
 
 .playground {
@@ -162,6 +166,21 @@
 .introduction {
   padding: 48px 0 38px;
 }
+.introduction-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.greeting-stamp {
+  padding: 7px 15px;
+  border-radius: 999px;
+  color: var(--page-rose);
+  background: var(--page-rose-tint);
+  font-size: 14px;
+  white-space: nowrap;
+  transform: rotate(5deg);
+}
 .page-label {
   display: inline-flex;
   align-items: center;
@@ -195,12 +214,13 @@
   display: none;
 }
 .conversation {
+  --conversation-inset: 28px;
   background: var(--page-surface);
   border: 1px solid var(--page-border);
   border-radius: 14px;
 }
 .conversation-heading {
-  padding: 26px 28px 0;
+  padding: 26px var(--conversation-inset) 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -210,6 +230,12 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+.heading-heart {
+  margin-left: 8px;
+  color: var(--page-rose);
+  font-size: 20px;
+  vertical-align: -1px;
 }
 .format-hint {
   display: inline-flex;
@@ -224,8 +250,8 @@
 }
 .conversation-note {
   margin: 0;
-  padding: 15px 28px;
-  border-top: 1px solid var(--page-border);
+  padding: 15px var(--conversation-inset);
+  border-top: 1px dashed var(--page-border);
   color: var(--page-muted);
   font-size: 12px;
 }
@@ -259,13 +285,16 @@
   font-size: 12px;
 }
 
-/* Host-page styling stays separate from the SDK's published defaults. */
+/* Theme tokens and page integration only; component behavior belongs to the SDK. */
 .playground .Hitalk {
   --ht-bg: var(--page-surface);
   --ht-text: var(--page-ink);
   --ht-header: var(--page-ink);
   --ht-muted: var(--page-muted);
   --ht-accent: var(--page-accent);
+  --ht-danger: var(--page-rose);
+  --ht-tag-bg: var(--page-rose);
+  --ht-tag-color: var(--page-surface);
   --ht-border: var(--page-border);
   --ht-border-dashed: var(--page-border);
   --ht-card-border: var(--page-border);
@@ -276,130 +305,31 @@
   --ht-code-text: var(--page-ink);
   --ht-smiles-bg: var(--page-surface);
   --ht-smiles-bar: var(--page-input);
-  padding: 0 28px 12px;
-  font-family: var(--page-font);
+  padding: 0 var(--conversation-inset) 12px;
+  font-family: inherit;
 }
+
+/* The page already provides the editor's outer frame. */
 .playground .Hitalk .vwrap {
   border: 0;
-  border-radius: 0;
-  padding: 20px 0 22px;
+  padding: 20px 0;
   margin: 0;
 }
-.playground .Hitalk .vheader {
-  gap: 18px;
-}
-.playground .Hitalk .vheader .vinput {
-  min-width: 0;
-  width: 0;
-  border-bottom: 1px solid var(--page-border);
-  padding: 10px 2px;
-  border-radius: 0;
-  font-family: inherit;
-  font-size: 13px;
-}
-.playground .Hitalk .vinput::placeholder {
-  color: var(--page-muted);
-  opacity: 1;
-}
-.playground .Hitalk .vheader .vinput:focus {
-  border-color: var(--page-accent);
-}
-.playground .Hitalk .veditor {
-  margin: 20px 0 0;
-  min-height: 150px;
-  padding: 15px 16px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--page-input);
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.8;
-  resize: vertical;
-  transition: border-color 180ms ease-out;
-}
-.playground .Hitalk .veditor:focus {
-  border-color: var(--page-accent);
-}
-.playground .Hitalk .vinput:focus-visible {
-  outline: 2px solid var(--page-accent);
-  outline-offset: 3px;
-}
-.playground .Hitalk .vcontrol {
-  margin-top: 14px;
+.playground .Hitalk .info {
+  border-top: 1px solid var(--page-border);
+  padding: 18px 0 0;
 }
 .playground .Hitalk .vbtn {
-  padding: 8px 20px;
-  min-height: 38px;
-  border-radius: 7px;
-  font-family: inherit;
-  font-size: 13px;
-  transition:
-    background 180ms ease-out,
-    border-color 180ms ease-out;
+  border-radius: 999px;
 }
 .playground .Hitalk .vsubmit {
   background: var(--page-accent);
   border-color: var(--page-accent);
   color: var(--page-surface);
-  min-width: 88px;
 }
-.playground .Hitalk .vsubmit:hover {
+.playground .Hitalk .vsubmit:hover:not(:disabled) {
   background: var(--page-ink);
   border-color: var(--page-ink);
-  color: var(--page-surface);
-}
-.playground .Hitalk .vbtn:focus-visible {
-  outline: 2px solid var(--page-accent);
-  outline-offset: 3px;
-}
-.playground .Hitalk .smiles-logo {
-  display: grid;
-  place-items: center;
-  min-width: 36px;
-  min-height: 36px;
-  border-radius: 6px;
-}
-.playground .Hitalk .smiles-logo:hover {
-  background: var(--page-input);
-}
-.playground .Hitalk .smiles-body {
-  width: min(380px, calc(100vw - 108px));
-  border-radius: 10px;
-  box-shadow: none;
-}
-.playground .Hitalk .info {
-  border-top: 1px solid var(--page-border);
-  padding-top: 19px;
-  margin-top: 0;
-}
-.playground .Hitalk .info .count {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--page-muted);
-}
-.playground .Hitalk .hitalk-status {
-  color: var(--page-muted);
-  font-size: 13px;
-}
-.playground .Hitalk .vempty {
-  padding: 31px 8px 40px;
-  font-size: 13px;
-}
-.playground .Hitalk .vimg:hover {
-  transform: none;
-}
-.playground .Hitalk .vcontent {
-  font-size: 14px;
-  line-height: 1.85;
-}
-.playground .Hitalk .vchildren {
-  border-top-style: solid;
-}
-.playground .Hitalk .welcome {
-  border-bottom-style: solid;
-}
-.playground .Hitalk .hitalk-more {
-  margin-bottom: 16px;
 }
 
 @media (max-width: 600px) {
@@ -425,33 +355,22 @@
   .introduction p {
     font-size: 14px;
   }
+  .greeting-stamp {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .conversation {
+    --conversation-inset: 18px;
+  }
   .conversation-heading {
-    padding: 22px 18px 0;
+    padding-top: 22px;
   }
   .format-hint {
     font-size: 11px;
     gap: 5px;
   }
-  .playground .Hitalk {
-    padding: 0 18px 8px;
-  }
-  .playground .Hitalk .vheader {
-    gap: 6px 12px;
-  }
-  .playground .Hitalk .vheader .vinput {
-    flex-basis: calc(50% - 12px);
-  }
-  .playground .Hitalk .vheader .vlink {
-    flex-basis: 100%;
-  }
-  .playground .Hitalk .veditor {
-    min-height: 145px;
-  }
-  .playground .Hitalk .smiles-body {
-    width: min(380px, calc(100vw - 76px));
-  }
   .conversation-note {
-    padding: 14px 18px;
+    padding-block: 14px;
   }
   .conversation-note span {
     display: none;

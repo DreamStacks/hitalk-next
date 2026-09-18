@@ -11,7 +11,7 @@ const instance = mount(container, {
       : 'https://hitalk-next-api.ihoey.com'),
   path: '/',
   title: 'Hitalk 开发示例',
-  placeholder: '说点什么吧...',
+  placeholder: '来都来了，留个爪印吧～',
   avatar: 'mm',
   pageSize: 10,
 })

@@ -1,0 +1,259 @@
+/* 评论列表 */
+.Hitalk .vlist {
+  width: 100%;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.Hitalk .vcard {
+  padding-top: 1.5rem;
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+
+.Hitalk .vimg {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: transform 0.6s;
+}
+
+.Hitalk .vimg:hover {
+  transform: rotate(360deg) scale(1.1);
+}
+
+.Hitalk .vcard > section {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--ht-card-border);
+}
+
+.Hitalk .vhead {
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.Hitalk .vhead a {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--ht-header);
+  text-decoration: none;
+  margin-right: 10px;
+}
+
+.Hitalk .vhead a:hover {
+  color: var(--ht-accent);
+}
+
+.Hitalk .vpin {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--ht-tag-bg);
+  color: var(--ht-tag-color);
+  font-size: 0.75rem;
+  border-radius: 3px;
+  margin-right: 8px;
+}
+
+.Hitalk .vtime {
+  color: var(--ht-muted);
+  font-size: 0.75rem;
+}
+
+.Hitalk .vua {
+  display: block;
+  margin-top: 4px;
+  color: var(--ht-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.Hitalk .vcontent {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  text-align: justify;
+  color: var(--ht-text);
+  font-size: 0.875rem;
+  line-height: 1.8;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.Hitalk .vcontent img.biaoqing {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.Hitalk .vcontent p {
+  margin: 8px 0;
+}
+
+.Hitalk .vreply-to {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: var(--ht-accent);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.Hitalk .vcard:focus {
+  outline: 2px solid var(--ht-accent);
+  outline-offset: 4px;
+}
+
+.Hitalk .vfooter {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.Hitalk .vlike {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: var(--ht-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.Hitalk .vlike:hover {
+  color: var(--ht-tag-bg);
+}
+
+.Hitalk .vlike-icon {
+  font-style: normal;
+  font-size: 1rem;
+}
+
+.Hitalk .vat {
+  font-size: 0.8125rem;
+  color: var(--ht-danger);
+  cursor: pointer;
+  user-select: none;
+}
+
+.Hitalk .vat:hover {
+  text-decoration: underline;
+}
+
+/* 嵌套评论 */
+.Hitalk .vchildren {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--ht-border);
+}
+
+.Hitalk .vchildren .vcard {
+  padding-top: 1rem;
+}
+
+.Hitalk .vchildren .vimg {
+  width: 32px;
+  height: 32px;
+}
+
+.Hitalk .vchildren .vcard > section {
+  padding-bottom: 0.5rem;
+}
+
+@media screen and (max-width: 520px) {
+  .Hitalk .vchildren {
+    margin-left: 26px;
+  }
+}
+
+/* Markdown 内容与折叠状态 */
+.Hitalk .vcontent {
+  word-wrap: break-word;
+  word-break: break-word;
+  text-align: justify;
+  color: var(--ht-text);
+  font-size: 0.875rem;
+  line-height: 1.8;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.Hitalk .vcontent img.biaoqing {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.Hitalk .vcontent p {
+  margin: 8px 0;
+}
+
+.Hitalk .vcontent table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.Hitalk .vcontent th,
+.Hitalk .vcontent td {
+  border: 1px solid var(--ht-border);
+  padding: 6px 10px;
+}
+
+.Hitalk .vcontent th {
+  font-weight: 600;
+}
+
+.Hitalk .vcontent hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--ht-border);
+}
+
+.Hitalk .vcontent ol,
+.Hitalk .vcontent ul {
+  padding-inline-start: 1.5em;
+}
+
+.Hitalk .vcontent a {
+  color: var(--ht-accent);
+  text-decoration: underline;
+}
+
+.Hitalk .vcontent a:hover {
+  color: var(--ht-danger);
+}
+
+.Hitalk .vcontent code,
+.Hitalk .vcontent pre {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--ht-code-bg);
+  border-radius: 3px;
+  font-size: 0.875rem;
+  font-family: 'Courier New', monospace;
+  color: var(--ht-code-text);
+}
+
+.Hitalk .vcontent.expand {
+  cursor: pointer;
+  max-height: 180px;
+  overflow: hidden;
+  position: relative;
+}
+
+.Hitalk .vcontent.expand:after {
+  content: 'Click to expand...';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  line-height: 50px;
+  text-align: center;
+  background: linear-gradient(transparent, var(--ht-bg));
+  color: var(--ht-muted);
+}

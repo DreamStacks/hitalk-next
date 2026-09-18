@@ -314,12 +314,13 @@ export class Hitalk {
           class="vbtn hitalk-more"
           ?hidden=${!this.hasMore}
           ?disabled=${this.loadingPage || this.submitting}
+          aria-busy=${this.loadingPage ? 'true' : 'false'}
           @click=${() => {
             if (!this.loadingPage && !this.submitting)
               void this.loadComments(this.page + 1)
           }}
         >
-          加载更多
+          ${this.loadingPage ? '正在加载…' : '加载更多评论'}
         </button>
       `,
       this.view
